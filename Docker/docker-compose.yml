@@ -27,6 +27,8 @@ services:
     image: pgvector/pgvector:pg16
     container_name: grievance_postgres
     restart: unless-stopped
+    env_file:
+      - ../Backend/.env
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
@@ -48,12 +50,12 @@ services:
   # ----------------------------------------------------------------------------
   api-gateway:
     build:
-      context: .
-      dockerfile: Dockerfile.gateway
+      context: ../Backend
+      dockerfile: ../Docker/Dockerfile.gateway
     container_name: api_gateway
     restart: unless-stopped
     env_file:
-      - .env
+      - ../Backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -72,12 +74,12 @@ services:
   # ----------------------------------------------------------------------------
   citizen-api:
     build:
-      context: .
-      dockerfile: Dockerfile.citizen
+      context: ../Backend
+      dockerfile: ../Docker/Dockerfile.citizen
     container_name: citizen_api
     restart: unless-stopped
     env_file:
-      - .env
+      - ../Backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -96,12 +98,12 @@ services:
   # ----------------------------------------------------------------------------
   callcentre-api:
     build:
-      context: .
-      dockerfile: Dockerfile.callcentre
+      context: ../Backend
+      dockerfile: ../Docker/Dockerfile.callcentre
     container_name: callcentre_api
     restart: unless-stopped
     env_file:
-      - .env
+      - ../Backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -120,12 +122,12 @@ services:
   # ----------------------------------------------------------------------------
   officer-api:
     build:
-      context: .
-      dockerfile: Dockerfile.officer
+      context: ../Backend
+      dockerfile: ../Docker/Dockerfile.officer
     container_name: officer_api
     restart: unless-stopped
     env_file:
-      - .env
+      - ../Backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -144,12 +146,12 @@ services:
   # ----------------------------------------------------------------------------
   admin-api:
     build:
-      context: .
-      dockerfile: Dockerfile.admin
+      context: ../Backend
+      dockerfile: ../Docker/Dockerfile.admin
     container_name: admin_api
     restart: unless-stopped
     env_file:
-      - .env
+      - ../Backend/.env
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
