@@ -201,33 +201,42 @@ Response:"""
                 # 2. Google Gemini API
                 elif provider == "gemini" or "gemini" in ai_model.lower():
                     base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-                    model_name = ai_model if "models/" in ai_model else f"models/{ai_model}"
-                    url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
+                    models_to_try = [ai_model, "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
                     
-                    payload = {
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {
-                            "responseMimeType": "application/json",
-                            "temperature": 0.1
-                        }
-                    }
-                    resp = await client.post(url, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            text_resp = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
-                            parsed = json.loads(text_resp)
-                            valid_priority = str(parsed.get("priority", "")).lower()
-                            if valid_priority not in ["high", "medium", "low"]:
-                                valid_priority = "medium"
-                            return {
-                                "category": parsed.get("category", "Municipal Administration"),
-                                "priority": valid_priority,
-                                "summary": parsed.get("summary", transcript[:150]),
-                                "sentiment": parsed.get("sentiment", "neutral"),
-                                "english_translation": parsed.get("english_translation", transcript)
+                    for model in models_to_try:
+                        model_name = model if "models/" in model else f"models/{model}"
+                        url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
+                        
+                        payload = {
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {
+                                "responseMimeType": "application/json",
+                                "temperature": 0.1
                             }
+                        }
+                        resp = await client.post(url, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                text_resp = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                                parsed = json.loads(text_resp)
+                                valid_priority = str(parsed.get("priority", "")).lower()
+                                if valid_priority not in ["high", "medium", "low"]:
+                                    valid_priority = "medium"
+                                return {
+                                    "category": parsed.get("category", "General"),
+                                    "priority": valid_priority,
+                                    "summary": parsed.get("summary", transcript[:150]),
+                                    "sentiment": parsed.get("sentiment", "neutral"),
+                                    "english_translation": parsed.get("english_translation", transcript)
+                                }
+                        elif resp.status_code == 404:
+                            # Try the next model
+                            continue
+                        else:
+                            # Other errors, just break and fallback to heuristic
+                            break
 
                 # 3. OpenAI or OpenAI-compatible API
                 else:

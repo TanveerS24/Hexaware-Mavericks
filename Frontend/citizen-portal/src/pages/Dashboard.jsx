@@ -187,6 +187,7 @@ const Dashboard = () => {
       formData.append('transcript', englishTranslation || transcript);
       if (aiSummary) formData.append('ai_summary', aiSummary);
       if (category) formData.append('category', category);
+      if (priority) formData.append('priority', priority);
       
       const locData = useRegisteredLocation && user ? {
         ward: user.area,

@@ -200,7 +200,7 @@ class IssueService:
             old_status=None,
             new_status=IssueStatus.NEW.value,
             changed_by_user_id=citizen.id,
-            notes="Grievance filed by citizen" + (" (Potential duplicate)" if dup_info["is_duplicate"] else "")
+            notes="Grievance filed by citizen" + (" (Potential duplicate)" if dup_info.is_duplicate else "")
         )
         db.add(history)
 
