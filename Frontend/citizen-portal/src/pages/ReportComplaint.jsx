@@ -1,7 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ReportComplaint = () => {
-  return (<div><h2>ReportComplaint</h2></div>);
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    navigate('/dashboard');
+  }, [navigate]);
+
+  return null;
 };
 
 export default ReportComplaint;

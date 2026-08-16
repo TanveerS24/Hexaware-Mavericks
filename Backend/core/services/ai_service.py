@@ -338,9 +338,57 @@ Response:"""
     @classmethod
     async def query_citizen_chatbot(cls, context_data: str, user_query: str) -> str:
         """
-        Query Gemini based on citizen's complaint history context.
+        Query AI based on citizen's complaint history context.
         """
-        result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
-        if result:
-            return result
+        prompt = f"""You are a helpful AI assistant for the Citizen Grievance Portal.
+Use ONLY the following context about the citizen's active complaints to answer their question.
+If the answer is not contained in the context, politely inform them that you do not have that information.
+Do NOT invent or hallucinate information.
+
+Context (Citizen's Complaints):
+{context_data}
+
+Citizen's Question:
+{user_query}
+
+Answer:"""
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                provider = getattr(settings, "AI_PROVIDER", "gemini")
+                ai_model = getattr(settings, "AI_MODEL", "gemini-1.5-flash")
+                ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
+
+                if ai_api_key.startswith("xai-"):
+                    provider = "grok"
+                    ai_model = "grok-beta"
+                    settings.AI_BASE_URL = "https://api.x.ai/v1"
+
+                # Use OpenAI compatible format for Grok/OpenAI
+                if provider != "gemini" and provider not in ["claude", "anthropic"]:
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                    url = f"{base_url}/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {ai_api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": ai_model,
+                        "messages": [
+                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.2
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        return resp.json()["choices"][0]["message"]["content"].strip()
+                
+                # If Gemini
+                elif provider == "gemini":
+                    result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
+                    if result: return result
+                    
+        except Exception as e:
+            logger.warning(f"Chatbot API request failed ({str(e)}).")
+
         return "I apologize, but I am currently unable to process your request. Please try again later."

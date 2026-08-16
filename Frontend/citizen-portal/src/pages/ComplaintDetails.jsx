@@ -133,15 +133,21 @@ const ComplaintDetails = () => {
           </div>
           <div>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block' }}>Department</span>
-            <strong>{issue.department?.name || 'Unassigned'}</strong>
+            <strong>{issue.department_name || 'Unassigned (Waiting for Officer)'}</strong>
           </div>
           <div>
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block' }}>Priority</span>
             <strong>{issue.priority || 'Not Set'}</strong>
           </div>
           <div>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block' }}>Ward</span>
-            <strong>{issue.ward || 'Unknown'}</strong>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block' }}>Ward Location</span>
+            <strong>{issue.ward || 'Based on GPS'}</strong>
+          </div>
+          <div>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block' }}>ETA for Resolution</span>
+            <strong style={{ color: issue.sla_due_at ? 'var(--warning)' : 'var(--text-primary)' }}>
+              {issue.sla_due_at ? new Date(issue.sla_due_at).toLocaleString() : 'Updating soon...'}
+            </strong>
           </div>
         </div>
 
