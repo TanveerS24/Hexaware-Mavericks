@@ -16,7 +16,7 @@ const MyComplaints = () => {
             'Authorization': `Bearer ${token}`
           }
         });
-        setComplaints(response.data || []);
+        setComplaints(response.data.items || []);
       } catch (err) {
         setError('Failed to fetch your complaints. Please try again.');
         console.error(err);
