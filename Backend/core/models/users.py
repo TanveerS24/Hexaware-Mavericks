@@ -8,7 +8,6 @@ from core.db.base import Base
 
 class UserRole(str, enum.Enum):
     CITIZEN = "citizen"
-    CALLCENTRE = "callcentre"
     OFFICER = "officer"
     ADMIN = "admin"
 

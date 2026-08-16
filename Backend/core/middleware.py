@@ -42,8 +42,6 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             r"^/citizen/auth/login/?$",
             r"^/citizen/auth/register/?$",
             r"^/citizen/auth/refresh/?$",
-            r"^/callcentre/auth/login/?$",
-            r"^/callcentre/auth/refresh/?$",
             r"^/officer/auth/login/?$",
             r"^/officer/auth/refresh/?$",
             r"^/admin/auth/login/?$",

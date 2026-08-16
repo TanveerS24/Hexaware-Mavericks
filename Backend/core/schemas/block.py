@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from core.models.blocked_users import BlockDurationTier
 
 
@@ -10,6 +10,8 @@ class BlockUserRequest(BaseModel):
 
 
 class BlockHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     block_start_at: datetime
@@ -21,9 +23,6 @@ class BlockHistoryResponse(BaseModel):
     is_active: bool
     score_at_unblock: Optional[float] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class BlockSuggestionResponse(BaseModel):

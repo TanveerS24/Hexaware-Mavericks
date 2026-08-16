@@ -12,7 +12,6 @@ from core.schemas.user import (
 )
 from core.schemas.issue import (
     IssueCreateRequest,
-    CallCentreManualIssueRequest,
     IssueForwardRequest,
     IssueResolveRequest,
     IssueMarkMaliciousRequest,
@@ -77,7 +76,6 @@ __all__ = [
     "CreateStaffUserRequest",
     "UserListResponse",
     "IssueCreateRequest",
-    "CallCentreManualIssueRequest",
     "IssueForwardRequest",
     "IssueResolveRequest",
     "IssueMarkMaliciousRequest",

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from core.models.users import UserRole, UserStatus
 
 
@@ -34,6 +34,8 @@ class RefreshTokenRequest(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     email: str
@@ -44,11 +46,10 @@ class UserResponse(BaseModel):
     status: UserStatus
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class MeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     email: str
@@ -62,6 +63,3 @@ class MeResponse(BaseModel):
     block_reason: Optional[str] = None
     duration_tier: Optional[str] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True

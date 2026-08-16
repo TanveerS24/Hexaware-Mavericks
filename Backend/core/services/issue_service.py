@@ -21,7 +21,6 @@ from core.models.departments import Department
 from core.models.sla_config import SLAConfig
 from core.schemas.issue import (
     IssueCreateRequest,
-    CallCentreManualIssueRequest,
     IssueForwardRequest,
     IssueResolveRequest,
     IssueMarkMaliciousRequest,
@@ -209,82 +208,6 @@ class IssueService:
         )
 
         return issue, dup_result
-
-    @classmethod
-    async def create_manual_issue(
-        cls,
-        db: AsyncSession,
-        staff_user: User,
-        data: CallCentreManualIssueRequest
-    ) -> Issue:
-        """
-        Call centre staff raising grievance on behalf of a citizen.
-        """
-        # Find or create citizen user
-        user_res = await db.execute(select(User).where(User.phone == data.citizen_phone))
-        citizen = user_res.scalar_one_or_none()
-
-        if not citizen:
-            email = data.citizen_email or f"citizen_{data.citizen_phone.replace('+', '')}@city.gov"
-            citizen = User(
-                name=data.citizen_name,
-                email=email,
-                phone=data.citizen_phone,
-                password_hash="MANUAL_TICKET_PLACEHOLDER",
-                role=UserRole.CITIZEN,
-                credibility_score=1.0,
-                status=UserStatus.ACTIVE
-            )
-            db.add(citizen)
-            await db.flush()
-
-        # AI Classification
-        ai_res = await AIService.classify_grievance(data.transcript)
-        category = ai_res["category"]
-        priority = IssuePriority(ai_res["priority"])
-        summary = ai_res["summary"]
-        sentiment = ai_res["sentiment"]
-
-        ward = data.ward or stub_reverse_geocode(data.location_lat, data.location_lng)
-        dept_id = data.department_id or await cls.match_department(db, category)
-        sla_due_at = await cls.calculate_sla_due_date(db, category, priority)
-        issue_code = cls.generate_issue_code()
-
-        issue = Issue(
-            issue_id=issue_code,
-            citizen_id=citizen.id,
-            category=category,
-            department_id=dept_id,
-            priority=priority,
-            status=IssueStatus.NEW,
-            location_lat=data.location_lat,
-            location_lng=data.location_lng,
-            ward=ward,
-            transcript=data.transcript,
-            ai_summary=summary,
-            sentiment=sentiment,
-            assigned_officer_ids=[],
-            version=1,
-            sla_due_at=sla_due_at
-        )
-        db.add(issue)
-        await db.flush()
-
-        # Embedding & History
-        emb_vec = await RAGService.get_embedding(data.transcript)
-        db.add(IssueEmbedding(issue_id=issue.id, embedding=emb_vec))
-
-        db.add(IssueStatusHistory(
-            issue_id=issue.id,
-            old_status=None,
-            new_status=IssueStatus.NEW.value,
-            changed_by_user_id=staff_user.id,
-            notes=f"Manual grievance logged by call centre agent {staff_user.name}"
-        ))
-
-        await db.commit()
-        await db.refresh(issue)
-        return issue
 
     @staticmethod
     async def get_issue_by_id(db: AsyncSession, issue_id_or_code: str) -> Optional[Issue]:

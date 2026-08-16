@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 from citizen_api.main import app as citizen_app
-from callcentre_api.main import app as callcentre_app
 from officer_api.main import app as officer_app
 from admin_api.main import app as admin_app
+from gateway_api.main import app as gateway_app
 
 
 def test_citizen_health():
@@ -11,14 +11,6 @@ def test_citizen_health():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["service"] == "citizen-api"
-    assert resp.json()["status"] == "healthy"
-
-
-def test_callcentre_health():
-    client = TestClient(callcentre_app)
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json()["service"] == "callcentre-api"
     assert resp.json()["status"] == "healthy"
 
 
@@ -36,6 +28,17 @@ def test_admin_health():
     assert resp.status_code == 200
     assert resp.json()["service"] == "admin-api"
     assert resp.json()["status"] == "healthy"
+
+
+def test_gateway_health():
+    client = TestClient(gateway_app)
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["service"] == "api-gateway"
+    assert "citizen" in resp.json()["portals"]
+    assert "officer" in resp.json()["portals"]
+    assert "admin" in resp.json()["portals"]
+    assert "callcentre" not in resp.json()["portals"]
 
 
 def test_auth_middleware_blocks_unauthorized_protected_routes():

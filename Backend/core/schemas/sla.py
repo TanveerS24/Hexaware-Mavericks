@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SLAConfigCreateRequest(BaseModel):
@@ -10,14 +10,13 @@ class SLAConfigCreateRequest(BaseModel):
 
 
 class SLAConfigResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     category: str
     priority: str
     sla_hours: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class SLAConfigListResponse(BaseModel):

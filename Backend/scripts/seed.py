@@ -98,16 +98,6 @@ async def seed_database():
                 "status": UserStatus.ACTIVE
             },
             {
-                "name": "Alex Agent",
-                "email": "callcentre1@city.gov",
-                "phone": "+1000000001",
-                "password": "Agent@123",
-                "role": UserRole.CALLCENTRE,
-                "department_id": None,
-                "credibility_score": 1.0,
-                "status": UserStatus.ACTIVE
-            },
-            {
                 "name": "Officer Priya Sharma",
                 "email": "officer.water@city.gov",
                 "phone": "+1000000002",

@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -33,16 +33,23 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # Ollama AI Configuration
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_LLM_MODEL: str = "qwen2.5:7b"
-    OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
+    # Supabase Configuration
+    SUPABASE_URL: str = "https://your-project-id.supabase.co"
+    SUPABASE_PUBLISHABLE_KEY: str = ""
+    SUPABASE_SECRET_KEY: str = ""
+    SUPABASE_JWKS_URL: str = ""
+
+    # Cloud AI Configuration (Anthropic Claude / Google Gemini / OpenAI-compatible API)
+    AI_PROVIDER: str = "claude"
+    AI_API_KEY: str = ""
+    AI_MODEL: str = "claude-3-5-haiku-20241022"
+    AI_EMBEDDING_MODEL: str = "text-embedding-004"
+    AI_BASE_URL: Optional[str] = None
     ENABLE_MOCK_AI_FALLBACK: bool = True
     EMBEDDING_DIMENSION: int = 768
 
     # Portal Ports
     CITIZEN_API_PORT: int = 8001
-    CALLCENTRE_API_PORT: int = 8002
     OFFICER_API_PORT: int = 8003
     ADMIN_API_PORT: int = 8004
 

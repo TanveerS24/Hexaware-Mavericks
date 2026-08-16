@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class NotificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     title: str
@@ -11,9 +13,6 @@ class NotificationResponse(BaseModel):
     is_read: bool
     notification_type: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class NotificationListResponse(BaseModel):

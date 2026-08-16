@@ -52,7 +52,7 @@ class AnalyticsService:
         total_citizens = citizen_count_res.scalar_one() or 0
 
         staff_count_res = await db.execute(
-            select(func.count(User.id)).where(User.role.in_([UserRole.CALLCENTRE, UserRole.OFFICER, UserRole.ADMIN]))
+            select(func.count(User.id)).where(User.role.in_([UserRole.OFFICER, UserRole.ADMIN]))
         )
         total_staff = staff_count_res.scalar_one() or 0
 

@@ -1,5 +1,5 @@
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DepartmentCreateRequest(BaseModel):
@@ -8,12 +8,11 @@ class DepartmentCreateRequest(BaseModel):
 
 
 class DepartmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     jurisdiction_area: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class DepartmentListResponse(BaseModel):

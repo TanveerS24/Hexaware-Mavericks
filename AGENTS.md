@@ -1,4 +1,4 @@
-# 🏛️ AI Agent Reference & Developer Guide — Citizen Call Intelligence Platform
+# 🏛️ AI Agent Reference & Developer Guide — Citizen Intelligence Platform
 
 > **Target Audience:** AI Coding Agents (Claude, Antigravity, Cursor, Copilot, etc.) and Human Engineers developing or maintaining this repository.
 > **Last Updated:** August 2026
@@ -7,9 +7,9 @@
 
 ## 📌 1. Platform Overview & System Architecture
 
-The **Citizen Call Intelligence Platform** is an enterprise-grade, asynchronous municipal grievance redressal backend built with **Python 3.11+**, **FastAPI**, **SQLAlchemy 2.0 (asyncio + asyncpg)**, **PostgreSQL 16 with pgvector**, and **Ollama LLM Engine**.
+The **Citizen Intelligence Platform** is an enterprise-grade, asynchronous municipal grievance redressal backend built with **Python 3.11+**, **FastAPI**, **SQLAlchemy 2.0 (asyncio + asyncpg)**, **Supabase PostgreSQL 16 with pgvector**, **Supabase Auth / JWKS**, and **Cloud AI Engine** (Google Gemini / OpenAI-compatible API).
 
-The backend serves four distinct portals via a single shared `core/` package and a Centralized API Gateway:
+The backend serves three distinct portals via a single shared `core/` package and a Centralized API Gateway:
 
 ```
                                ┌─────────────────────────────────────────┐
@@ -20,22 +20,22 @@ The backend serves four distinct portals via a single shared `core/` package and
                        ┌────────────────────────────────────────────────────────┐
                        │  Centralized API Gateway: Port 8000 (/docs)            │
                        │   - Unified Entry Point, CORS & Auth Middleware        │
-                       └───────────┬────────────┬───────────┬───────────┬───────┘
-                                   │            │           │           │
-         ┌─────────────────────────┼────────────┼───────────┴───────────┼─────────────────────────┐
-         ▼                         ▼            ▼                       ▼                         ▼
-┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌───────────────────────────┐
-│ Citizen Portal   │ │ Call Centre API  │ │ Officer API      │ │ Admin API        │ │ PostgreSQL 16 (pgvector)  │
-│ Port 8001 (/docs)│ │ Port 8002 (/docs)│ │ Port 8003 (/docs)│ │ Port 8004 (/docs)│ │ Port 5432                 │
-└────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘ └────────┬─────────┘ └─────────────┬─────────────┘
-         │                    │                    │                    │                         │
-         └────────────────────┴──────────┬─────────┴────────────────────┴─────────────────────────┘
-                                         │
-                                         ▼
-                               ┌───────────────────┐
-                               │  Ollama Engine    │
-                               │  Port 11434       │
-                               └───────────────────┘
+                       └───────────┬────────────────────────┬───────────────────┘
+                                   │                        │
+         ┌─────────────────────────┼────────────────────────┴─────────────────────────┐
+         ▼                         ▼                                                  ▼
+┌──────────────────┐      ┌──────────────────┐                               ┌──────────────────┐
+│ Citizen Portal   │      │ Officer API      │                               │ Admin API        │
+│ Port 8001 (/docs)│      │ Port 8003 (/docs)│                               │ Port 8004 (/docs)│
+└────────┬─────────┘      └────────┬─────────┘                               └────────┬─────────┘
+         │                         │                                                  │
+         └─────────────────────────┼──────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+        ┌─────────────────────────────────────────────────────┐
+        │  Supabase (PostgreSQL 16 + pgvector + Auth / JWKS)  │
+        │  Cloud AI API (Gemini / OpenAI LLM + Embeddings)    │
+        └─────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -46,32 +46,24 @@ The repository enforces strict separation of concerns. **Zero business logic dup
 
 ```
 Hexaware-Mavericks/
-├── AGENTS.md                   # This master agent instructions file
+├── AGENTS.md                   # Master agent reference guide
 ├── .gitignore
-├── Docker/                     # Docker containerization & compose orchestration
-│   ├── docker-compose.yml      # Multi-container stack definition
-│   ├── Dockerfile.gateway      # Centralized API Gateway container
-│   ├── Dockerfile.citizen      # Citizen Portal API container
-│   ├── Dockerfile.callcentre   # Call Centre Portal API container
-│   ├── Dockerfile.officer      # Field Officer API container
-│   └── Dockerfile.admin        # Municipal Admin API container
 └── Backend/                    # Single source of backend code and config
     ├── .env                    # Active local environment variables (DO NOT COMMIT SECRETS)
     ├── .env.example            # Committed reference template with all defaults
     ├── README.md               # Backend documentation
     ├── requirements.txt        # Python dependency manifest
     ├── alembic.ini             # Alembic migration configuration
-    ├── entrypoint.sh           # Container startup: DB wait, migration & seed runner
     ├── core/                   # SHARED BUSINESS LOGIC & DATA LAYER
     │   ├── config.py           # Pydantic-settings config (reads Backend/.env)
-    │   ├── security.py         # JWT tokens, password hashing, refresh token rotation
+    │   ├── security.py         # JWT tokens, Supabase JWKS validation, password hashing
     │   ├── exceptions.py       # Custom exception hierarchy & standard error responses
     │   ├── middleware.py       # JWT Authentication & Authorization middleware
     │   ├── db/
     │   │   ├── base.py         # Declarative Base metadata
     │   │   └── session.py      # AsyncSessionLocal & AsyncEngine setup
     │   ├── models/             # SQLAlchemy Async Declarative Models
-    │   │   ├── users.py        # User & Role definitions
+    │   │   ├── users.py        # User & Role definitions (citizen, officer, admin)
     │   │   ├── refresh_tokens.py # Hashed refresh tokens for session management
     │   │   ├── blocked_users.py  # User block audit log & duration tiers
     │   │   ├── credibility_log.py# Score adjustment audit log
@@ -89,20 +81,17 @@ Hexaware-Mavericks/
     │   └── services/           # Reusable Business Services
     │       ├── auth_service.py         # Login, register, token rotation, reuse detection
     │       ├── issue_service.py        # Triage pipeline, duplicates, optimistic locking
-    │       ├── ai_service.py           # Ollama STT + LLM classifier wrapper
-    │       ├── rag_service.py          # Vector search, duplicate triage & chatbot copilot
+    │       ├── ai_service.py           # Cloud AI (Gemini/OpenAI) classifier + fallback
+    │       ├── rag_service.py          # Vector embeddings, duplicate triage & chatbot RAG
     │       ├── credibility_service.py  # Penalty & lazy smooth recovery calculations
     │       ├── block_service.py        # Progressive tier suggestions & active block guards
     │       ├── notification_service.py # Citizen alert dispatch
     │       └── analytics_service.py    # Metric aggregates, SLA compliance, heatmaps
     ├── gateway_api/            # Centralized API Gateway (Port 8000)
-    │   └── main.py             # Mounts all portal routers under unified prefixes
+    │   └── main.py             # Mounts citizen, officer, and admin portal routers
     ├── citizen_api/            # Citizen Self-Service Portal (Port 8001)
     │   ├── main.py
     │   └── routers/            # auth, issues, chatbot, notifications, announcements, faq
-    ├── callcentre_api/         # Call Centre Agent Portal (Port 8002)
-    │   ├── main.py
-    │   └── routers/            # auth, queue, issues
     ├── officer_api/            # Field Officer Portal (Port 8003)
     │   ├── main.py
     │   └── routers/            # auth, queue, issues
@@ -117,6 +106,7 @@ Hexaware-Mavericks/
     └── tests/                  # Pytest unit & integration test suite
         ├── test_credibility_recovery.py
         ├── test_auth_security.py
+        ├── test_ai_service.py
         └── test_api_portals.py
 ```
 
@@ -125,21 +115,21 @@ Hexaware-Mavericks/
 ## ⚙️ 3. Environment & Configuration Rules
 
 ### 🔑 Single Source of Truth: `Backend/.env`
-- **Rule**: All environment variables reside **ONLY in `Backend/.env`** (templated by `Backend/.env.example`).
-- **Docker Compose**: `Docker/docker-compose.yml` mounts and consumes `../Backend/.env` directly via `env_file: - ../Backend/.env`.
-- **No `.env` in `Docker/`**: Never create a `.env` file in the `Docker/` directory to prevent configuration drift.
+- **Rule**: All environment variables reside in `Backend/.env` (templated by `Backend/.env.example`).
 
-### Core Configuration Parameters
+### Supabase & Cloud AI Parameters
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | `postgresql+asyncpg://postgres:postgres@postgres:5432/grievance_db` | Async SQLAlchemy DB connection string |
-| `JWT_SECRET_KEY` | `super_secret_jwt_signing_key_...` | HS256 JWT signature secret |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Stateless JWT expiration |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token lifecycle |
-| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama LLM endpoint |
-| `OLLAMA_LLM_MODEL` | `qwen2.5:7b` | LLM model for categorization & triage |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model for duplicate detection |
-| `ENABLE_MOCK_AI_FALLBACK` | `true` | Falls back to rule-based classification if Ollama offline |
+| `SUPABASE_URL` | `https://qmodhgbjhqkveaihtwmg.supabase.co` | Supabase project API URL |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | Supabase Anon / Publishable client key |
+| `SUPABASE_SECRET_KEY` | `sb_secret_...` | Supabase Service Role Secret Key |
+| `SUPABASE_JWKS_URL` | `.../.well-known/jwks.json` | JWKS endpoint for asymmetric JWT validation |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | Async SQLAlchemy DB connection string |
+| `AI_PROVIDER` | `claude` | Cloud AI provider (`claude`, `gemini`, or `openai`) |
+| `AI_API_KEY` | `""` | Cloud LLM & Embeddings API key |
+| `AI_MODEL` | `claude-3-5-haiku-20241022` | LLM model for categorization & triage |
+| `AI_EMBEDDING_MODEL` | `text-embedding-004` | Model for semantic duplicate detection |
+| `ENABLE_MOCK_AI_FALLBACK` | `true` | Falls back to rule-based classification if offline |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins for teammate frontends |
 
 ---
@@ -164,7 +154,7 @@ erDiagram
         string phone
         string email UK
         string password_hash
-        enum role "citizen | callcentre | officer | admin"
+        enum role "citizen | officer | admin"
         int department_id FK
         float credibility_score "default 1.0"
         enum status "active | banned"
@@ -219,33 +209,26 @@ erDiagram
 
 ## 🔐 5. Authentication, Security & Session Management
 
-### 1. Stateless Access Tokens (JWT)
-- **Duration:** 15 minutes.
-- **Payload:** `{"sub": "<user_id>", "user_id": <int>, "role": "<role>", "department_id": <int|null>, "name": "<name>", "exp": <timestamp>}`.
-- **Header:** `Authorization: Bearer <access_token>` or `access_token` cookie.
+### 1. Dual Token Validation (Supabase JWKS + HS256)
+- **Supabase Auth:** Validates incoming Bearer tokens against `SUPABASE_JWKS_URL` using cached public keys.
+- **Native JWTs:** Validates and creates HS256 signed access tokens (`15 min`) and rotated refresh tokens (`30 days`).
 
-### 2. Rotated Refresh Tokens (SHA-256 Hashed)
-- **Duration:** 7 to 30 days.
-- **Security:** Never store raw refresh tokens in the database. Store `token_hash = SHA256(raw_token)`.
-- **Rotation:** Every call to `POST /auth/refresh` revokes the old refresh token and issues a new pair.
-- **Reuse Detection:** If an already revoked refresh token is submitted (indicating token theft), the backend **immediately revokes all active refresh tokens for that user**.
+### 2. Dual Web & Mobile Delivery
+- **Web Browsers:** Receives tokens as `httpOnly`, `Secure`, `SameSite=Lax` cookies.
+- **Mobile Apps (Flutter, React Native, iOS, Android):** Receives tokens in JSON body.
 
-### 3. Dual Web & Mobile Delivery
-- **Web Browsers:** Receives `access_token` and `refresh_token` as `httpOnly`, `Secure`, `SameSite=Lax` cookies.
-- **Mobile Apps (Flutter, React Native, iOS, Android):** Receives tokens in the JSON response body. Store `refresh_token` securely in iOS Keychain / Android Keystore.
-
-### 4. RBAC & Route Access Control
-- **Public Routes:** `/health`, `/docs`, `/openapi.json`, `/citizen/auth/*`, `/callcentre/auth/login`, `/officer/auth/login`, `/admin/auth/login`, `/citizen/faq`, `/citizen/announcements`.
-- **Role Provisioning:** Citizens can self-register via `POST /citizen/auth/register`. All staff roles (`callcentre`, `officer`, `admin`) **must be provisioned by an Admin** via `POST /admin/users`.
+### 3. RBAC & Route Access Control
+- **Public Routes:** `/health`, `/docs`, `/openapi.json`, `/citizen/auth/*`, `/officer/auth/login`, `/admin/auth/login`, `/citizen/faq`, `/citizen/announcements`.
+- **Role Provisioning:** Citizens can self-register via `POST /citizen/auth/register`. Staff roles (`officer`, `admin`) **must be provisioned by an Admin** via `POST /admin/users`.
 
 ---
 
 ## 🧮 6. Core Business Logic & Mathematical Formulas
 
 ### 1. Issue Creation Pipeline (`POST /citizen/issues`)
-1. **Block Enforcement:** Verifies citizen is not blocked via `require_not_blocked` dependency (returns `403 Forbidden` if active block exists).
+1. **Block Enforcement:** Verifies citizen is not blocked via `require_not_blocked` dependency.
 2. **STT & Audio Processing:** If audio uploaded, transcribes via STT.
-3. **AI Triage (Ollama / Fallback):** Classifies `{category, priority, summary, sentiment}` via structured LLM prompt.
+3. **AI Triage (Cloud AI / Heuristic Fallback):** Classifies `{category, priority, summary, sentiment}` via structured LLM prompt.
 4. **Reverse-Geocoding:** Maps `(location_lat, location_lng)` to municipal `ward`.
 5. **Duplicate Detection via pgvector:**
    $$\text{Cosine Similarity} = 1 - (\mathbf{v}_{\text{new}} \cdot \mathbf{v}_{\text{existing}})$$
@@ -255,46 +238,24 @@ erDiagram
 
 ### 2. Credibility Score Penalty
 - New accounts start with: $\text{Credibility Score} = 1.0$.
-- When an issue is marked `malicious` by Call Centre or Officer:
+- When an issue is marked `malicious` by Officer or Admin:
   $$\text{Score}_{\text{new}} = \max(0.0, \text{Score}_{\text{old}} - 0.15)$$
-- **Alert Threshold:** When $\text{Score} < 0.5$, an administrative alert is generated. **Citizens are not auto-blocked**; blocking requires human administrative review.
+- **Alert Threshold:** When $\text{Score} < 0.5$, an administrative alert is generated.
 
 ### 3. Progressive Block Tier Escalation
-When an admin views `GET /admin/users/{id}/block-suggest`, the system auto-suggests the next escalation tier based on prior block history:
 - **0 prior blocks (1st block):** `3d` (3 days)
 - **1 prior block (2nd block):** `10d` (10 days)
 - **2 prior blocks (3rd block):** `30d` (30 days)
 - **3+ prior blocks (4th+ block):** `permanent` (flips `users.status` to `banned`)
 
 ### 4. Lazy Smooth Credibility Recovery Formula
-After a temporary block expires, credibility recovers smoothly without background cron jobs (computed lazily on read):
-
 $$\text{Recovery Period (Days)} = 2 \times \text{Block Duration (Days)}$$
 $$\text{Daily Recovery Rate} = \frac{0.70 - \text{Score at Unblock}}{\text{Recovery Period (Days)}}$$
 $$\text{Current Score} = \min(0.70, \text{Score at Unblock} + \text{Daily Rate} \times \text{Days Since Unblock})$$
 
-- `score_at_unblock` is recorded when the block expires.
-- Maximum recovery target is capped at `0.70`.
-- Permanent bans have no recovery.
-
-### 5. Optimistic Locking on Issue Claim
-Field officers claim tickets from a shared department queue. To prevent race conditions:
-```sql
-UPDATE issues 
-SET assigned_officer_ids = array_append(assigned_officer_ids, :officer_id),
-    status = 'in_progress',
-    version = version + 1
-WHERE id = :issue_id 
-  AND version = :expected_version 
-  AND (assigned_officer_ids IS NULL OR cardinality(assigned_officer_ids) = 0);
-```
-If another officer claimed the ticket first, the query affects 0 rows and returns `409 Conflict`.
-
 ---
 
 ## 📡 7. Full API Endpoint Matrix
-
-All endpoints are accessible via Central Gateway (`http://<IP>:8000`) or dedicated portal ports.
 
 ### 👤 Citizen Portal (`/citizen` — Port 8001)
 | Method | Path | Auth / Role | Description |
@@ -312,17 +273,6 @@ All endpoints are accessible via Central Gateway (`http://<IP>:8000`) or dedicat
 | `GET` | `/citizen/announcements` | Public | Public municipal announcements |
 | `GET` | `/citizen/notifications` | Authenticated | Citizen alerts and grievance updates |
 
-### 🎧 Call Centre Portal (`/callcentre` — Port 8002)
-| Method | Path | Auth / Role | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/callcentre/auth/login` | Public | Agent login |
-| `GET` | `/callcentre/queue` | `callcentre`, `admin` | Priority queue (High → Med → Low) with filters |
-| `GET` | `/callcentre/issues/{id}` | `callcentre`, `admin` | Full issue inspection |
-| `POST` | `/callcentre/issues` | `callcentre`, `admin` | Manual ticket creation on citizen's behalf |
-| `PATCH`| `/callcentre/issues/{id}/forward` | `callcentre`, `admin` | Forward grievance to department claim pool |
-| `PATCH`| `/callcentre/issues/{id}/resolve` | `callcentre`, `admin` | Directly resolve simple grievances |
-| `PATCH`| `/callcentre/issues/{id}/mark-malicious` | `callcentre`, `admin` | Flag malicious issue & penalize citizen |
-
 ### 👷 Officer Portal (`/officer` — Port 8003)
 | Method | Path | Auth / Role | Description |
 | :--- | :--- | :--- | :--- |
@@ -337,7 +287,7 @@ All endpoints are accessible via Central Gateway (`http://<IP>:8000`) or dedicat
 | Method | Path | Auth / Role | Description |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/admin/auth/login` | Public | Administrator login |
-| `POST` | `/admin/users` | `admin` | Provision callcentre, officer, or admin accounts |
+| `POST` | `/admin/users` | `admin` | Provision officer or admin accounts |
 | `GET` | `/admin/users` | `admin` | List platform users with role/status filters |
 | `GET` | `/admin/issues` | `admin` | City-wide grievance search and inspection |
 | `GET` | `/admin/analytics/summary` | `admin` | High-level metrics, SLA compliance rate |
@@ -359,7 +309,6 @@ All endpoints are accessible via Central Gateway (`http://<IP>:8000`) or dedicat
 | Role | Email | Password | Details / Scope |
 | :--- | :--- | :--- | :--- |
 | **Administrator** | `admin@city.gov` | `Admin@123` | City-wide oversight & staff provisioning |
-| **Call Centre Agent** | `callcentre1@city.gov` | `Agent@123` | City priority queue & manual issue intake |
 | **Field Officer (Water)** | `officer.water@city.gov` | `Officer@123` | Scoped to Water & Sanitation department |
 | **Field Officer (Power)** | `officer.power@city.gov` | `Officer@123` | Scoped to Electricity & Power department |
 | **Citizen (Standard)** | `citizen.jane@example.com` | `Citizen@123` | Credibility: `1.0`, Active, can file grievances |
@@ -367,46 +316,25 @@ All endpoints are accessible via Central Gateway (`http://<IP>:8000`) or dedicat
 
 ---
 
-## 🛠️ 9. Developer & AI Agent Workflow Guide
+## 🛠️ 9. Developer Workflow Guide
 
-### 1. Starting the Entire Stack with Docker
+### 1. Running Backend Services Locally
 ```bash
-# Navigate to Docker folder
-cd Docker
+# Navigate to Backend folder
+cd Backend
 
-# Build and start all services in background
-docker compose up -d --build
+# Run Database Migrations (Supabase PostgreSQL)
+alembic upgrade head
 
-# Inspect running containers and health status
-docker compose ps
+# Seed Initial Master Data & Demo Users
+python scripts/seed.py
+
+# Start API Gateway (Port 8000)
+python -m gateway_api.main
 ```
 
-### 2. Automatic Migrations & Database Seeding
-Container startup is managed by `Backend/entrypoint.sh`:
-1. Polling script waits for PostgreSQL to become healthy.
-2. Applies Alembic migrations: `alembic upgrade head`.
-3. Runs database seeding: `python3 scripts/seed.py`.
-4. Starts the targeted FastAPI Uvicorn service.
-
-### 3. Running Test Suites
+### 2. Running Test Suites
 ```bash
-# Option A: Run Pytest locally inside Backend/ (with virtualenv activated)
 cd Backend
 pytest tests/ -v
-
-# Option B: Run Pytest inside the running Docker container
-docker compose exec api-gateway pytest tests/ -v
-
-# Option C: Run full live cURL integration test suite
-bash Backend/scripts/test_curl_all.sh
 ```
-
----
-
-## 📋 10. Coding Standards for AI Agents Modifying this Codebase
-
-1. **Async Everywhere:** All database calls must use `await session.execute(...)` with `AsyncSession`. Never use synchronous DB drivers.
-2. **Pydantic Validation:** All request bodies and responses must be typed using schemas in `core/schemas/`. Never return raw dictionaries from endpoints.
-3. **Centralized Exceptions:** Use custom exceptions from `core.exceptions` (`NotFoundError`, `ForbiddenError`, `ConflictError`, `ValidationError`, `AccountBlockedError`). Never raise generic `HTTPException` inside service functions.
-4. **No Logic Duplication:** Any logic needed by multiple portals belongs in `core/services/` or `core/models/`.
-5. **Preserve Line Endings:** Ensure scripts (like `entrypoint.sh` and `.sh` files) retain LF line endings to avoid Linux container execution errors on Windows hosts.

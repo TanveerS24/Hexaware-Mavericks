@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from core.models.issues import IssuePriority, IssueStatus
 
 
@@ -11,17 +11,6 @@ class IssueCreateRequest(BaseModel):
     ward: Optional[str] = None
     audio_url: Optional[str] = None
     category: Optional[str] = None  # Optional override if client provides
-
-
-class CallCentreManualIssueRequest(BaseModel):
-    citizen_name: str = Field(..., min_length=2)
-    citizen_phone: str = Field(..., min_length=8)
-    citizen_email: Optional[str] = None
-    transcript: str = Field(..., min_length=5)
-    location_lat: Optional[float] = None
-    location_lng: Optional[float] = None
-    ward: Optional[str] = None
-    department_id: Optional[int] = None
 
 
 class IssueForwardRequest(BaseModel):
@@ -48,6 +37,8 @@ class IssueClaimRequest(BaseModel):
 
 
 class IssueHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     old_status: Optional[str] = None
     new_status: str
@@ -55,9 +46,6 @@ class IssueHistoryResponse(BaseModel):
     changed_by_name: Optional[str] = None
     changed_at: datetime
     notes: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class DuplicateCheckResult(BaseModel):
@@ -68,6 +56,8 @@ class DuplicateCheckResult(BaseModel):
 
 
 class IssueResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     issue_id: str
     citizen_id: int
@@ -92,9 +82,6 @@ class IssueResponse(BaseModel):
     resolved_at: Optional[datetime] = None
     history: List[IssueHistoryResponse] = []
     duplicate_info: Optional[DuplicateCheckResult] = None
-
-    class Config:
-        from_attributes = True
 
 
 class IssueListResponse(BaseModel):

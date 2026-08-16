@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 class AIService:
     """
-    Handles Speech-to-Text transcription and Ollama LLM structured complaint classification.
+    Handles Speech-to-Text transcription and Cloud AI API (Gemini / OpenAI-compatible)
+    structured complaint classification with robust heuristic fallback.
     """
 
     @staticmethod
@@ -20,11 +21,9 @@ class AIService:
         Transcribe audio input into plain text.
         Stubs or calls STT engine, with intelligent fallback.
         """
-        # If audio is empty
         if not audio_bytes or len(audio_bytes) < 10:
             return "Citizen complaint submitted via audio recording."
         
-        # Audio transcription stub / wrapper (can integrate whisper / ollama stt)
         return (
             "The street lights and power line in our block have been sparking dangerously since yesterday. "
             "Please send an emergency crew to fix the electrical issue."
@@ -33,8 +32,7 @@ class AIService:
     @staticmethod
     def _heuristic_classify(text: str) -> Dict[str, Any]:
         """
-        Rule-based classifier used as an instant, zero-downtime fallback
-        when Ollama is booting or unavailable.
+        Rule-based classifier used as an instant, zero-downtime fallback.
         """
         lower = text.lower()
 
@@ -83,9 +81,12 @@ class AIService:
     @classmethod
     async def classify_grievance(cls, transcript: str) -> Dict[str, Any]:
         """
-        Calls Ollama LLM to classify grievance and extract category, priority, summary, and sentiment.
-        Falls back seamlessly to heuristic classifier if Ollama is unreachable.
+        Calls Cloud AI API to classify grievance and extract category, priority, summary, and sentiment.
+        Falls back seamlessly to heuristic classifier if API is not configured or fails.
         """
+        if not settings.AI_API_KEY:
+            return cls._heuristic_classify(transcript)
+
         prompt = f"""You are an AI assistant for a municipal citizen grievance redressal platform.
 Analyze the following citizen complaint and return ONLY a valid JSON object matching this schema:
 {{
@@ -100,40 +101,108 @@ Complaint Transcript:
 
 Response:"""
 
-        payload = {
-            "model": settings.OLLAMA_LLM_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": 0.1
-            }
-        }
-
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    f"{settings.OLLAMA_BASE_URL}/api/generate",
-                    json=payload
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    response_text = data.get("response", "{}")
-                    parsed = json.loads(response_text)
-                    
-                    # Validate fields
-                    valid_priority = parsed.get("priority", "").lower()
-                    if valid_priority not in ["high", "medium", "low"]:
-                        valid_priority = "medium"
-
-                    return {
-                        "category": parsed.get("category", "Municipal Administration"),
-                        "priority": valid_priority,
-                        "summary": parsed.get("summary", transcript[:150]),
-                        "sentiment": parsed.get("sentiment", "neutral")
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                # 1. Anthropic Claude API
+                if settings.AI_PROVIDER in ["claude", "anthropic"] or "claude" in settings.AI_MODEL.lower():
+                    base_url = (settings.AI_BASE_URL or "https://api.anthropic.com/v1").rstrip("/")
+                    url = f"{base_url}/messages"
+                    headers = {
+                        "x-api-key": settings.AI_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
                     }
-        except Exception as e:
-            logger.warning(f"Ollama API request failed or timed out ({str(e)}). Using fallback classification.")
+                    payload = {
+                        "model": settings.AI_MODEL if "claude" in settings.AI_MODEL.lower() else "claude-3-5-haiku-20241022",
+                        "max_tokens": 1024,
+                        "system": "You are an AI assistant for a municipal citizen grievance redressal platform. You output strictly a valid JSON object matching the requested schema with no markdown decoration.",
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.1
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content_blocks = data.get("content", [])
+                        if content_blocks and content_blocks[0].get("type") == "text":
+                            raw_text = content_blocks[0].get("text", "{}").strip()
+                            clean_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+                            parsed = json.loads(clean_text)
+                            valid_priority = str(parsed.get("priority", "")).lower()
+                            if valid_priority not in ["high", "medium", "low"]:
+                                valid_priority = "medium"
+                            return {
+                                "category": parsed.get("category", "Municipal Administration"),
+                                "priority": valid_priority,
+                                "summary": parsed.get("summary", transcript[:150]),
+                                "sentiment": parsed.get("sentiment", "neutral")
+                            }
+                    else:
+                        logger.warning(f"Claude API request returned status {resp.status_code}: {resp.text}")
 
-        # Fallback
+                # 2. Google Gemini API
+                elif settings.AI_PROVIDER == "gemini" or "gemini" in settings.AI_MODEL.lower():
+                    base_url = settings.AI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta"
+                    model_name = settings.AI_MODEL if "models/" in settings.AI_MODEL else f"models/{settings.AI_MODEL}"
+                    url = f"{base_url}/{model_name}:generateContent?key={settings.AI_API_KEY}"
+                    
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "responseMimeType": "application/json",
+                            "temperature": 0.1
+                        }
+                    }
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            text_resp = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                            parsed = json.loads(text_resp)
+                            valid_priority = str(parsed.get("priority", "")).lower()
+                            if valid_priority not in ["high", "medium", "low"]:
+                                valid_priority = "medium"
+                            return {
+                                "category": parsed.get("category", "Municipal Administration"),
+                                "priority": valid_priority,
+                                "summary": parsed.get("summary", transcript[:150]),
+                                "sentiment": parsed.get("sentiment", "neutral")
+                            }
+
+                # 3. OpenAI or OpenAI-compatible API
+                else:
+                    base_url = (settings.AI_BASE_URL or "https://api.openai.com/v1").rstrip("/")
+                    url = f"{base_url}/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {settings.AI_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": settings.AI_MODEL,
+                        "messages": [
+                            {"role": "system", "content": "You output strictly valid JSON."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.1,
+                        "response_format": {"type": "json_object"}
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        text_resp = data["choices"][0]["message"]["content"]
+                        parsed = json.loads(text_resp)
+                        valid_priority = str(parsed.get("priority", "")).lower()
+                        if valid_priority not in ["high", "medium", "low"]:
+                            valid_priority = "medium"
+                        return {
+                            "category": parsed.get("category", "Municipal Administration"),
+                            "priority": valid_priority,
+                            "summary": parsed.get("summary", transcript[:150]),
+                            "sentiment": parsed.get("sentiment", "neutral")
+                        }
+        except Exception as e:
+            logger.warning(f"Cloud AI API request failed ({str(e)}). Using fallback classification.")
+
         return cls._heuristic_classify(transcript)

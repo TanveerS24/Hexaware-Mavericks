@@ -127,53 +127,8 @@ my_issues_code=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$GATEWAY_URL/cit
 assert_status "List Citizen Grievances" 200 "$my_issues_code"
 
 
-# 4. Call Centre Portal via Gateway
-echo -e "\n${BLUE}--- 4. Testing Call Centre Portal via Gateway ($GATEWAY_URL/callcentre) ---${NC}"
-
-# Agent Login
-cc_login=$(curl -s -X POST "$GATEWAY_URL/callcentre/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email": "callcentre1@city.gov", "password": "Agent@123"}')
-CC_TOKEN=$(echo "$cc_login" | python3 -c "import sys, json; print(json.load(sys.stdin).get('access_token', ''))" 2>/dev/null || echo "")
-
-if [ -n "$CC_TOKEN" ]; then
-    echo -e "${GREEN}✓ [PASS]${NC} Call Centre Agent Login via Gateway"
-    pass_count=$((pass_count + 1))
-else
-    echo -e "${RED}✗ [FAIL]${NC} Call Centre Agent Login failed"
-    fail_count=$((fail_count + 1))
-fi
-
-# View Call Centre Priority Queue
-queue_code=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$GATEWAY_URL/callcentre/queue" \
-  -H "Authorization: Bearer $CC_TOKEN")
-assert_status "Call Centre Priority Queue" 200 "$queue_code"
-
-# Create Manual Ticket on citizen behalf
-manual_resp=$(curl -s -w "\n%{http_code}" -X POST "$GATEWAY_URL/callcentre/issues" \
-  -H "Authorization: Bearer $CC_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "citizen_name": "Call In Citizen",
-    "citizen_phone": "+1999888777",
-    "transcript": "Dead animal near community dumpster causing foul smell.",
-    "location_lat": 12.9800,
-    "location_lng": 77.6000,
-    "ward": "Ward 2"
-  }')
-manual_status=$(echo "$manual_resp" | tail -n1)
-assert_status "Call Centre Manual Ticket Creation" 201 "$manual_status"
-
-# Forward grievance to Department 1 (Water & Sanitation)
-fwd_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$GATEWAY_URL/callcentre/issues/$CREATED_ISSUE_ID/forward" \
-  -H "Authorization: Bearer $CC_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"department_id": 1, "notes": "Forwarded to Water & Sanitation emergency field unit"}')
-assert_status "Forward Grievance to Department Pool" 200 "$fwd_code"
-
-
-# 5. Officer Portal via Gateway
-echo -e "\n${BLUE}--- 5. Testing Officer Portal via Gateway ($GATEWAY_URL/officer) ---${NC}"
+# 4. Officer Portal via Gateway
+echo -e "\n${BLUE}--- 4. Testing Officer Portal via Gateway ($GATEWAY_URL/officer) ---${NC}"
 
 # Officer Login
 off_login=$(curl -s -X POST "$GATEWAY_URL/officer/auth/login" \
@@ -209,8 +164,8 @@ res_code=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$GATEWAY_URL/officer
 assert_status "Officer Mark Issue Resolved" 200 "$res_code"
 
 
-# 6. Admin Dashboard via Gateway
-echo -e "\n${BLUE}--- 6. Testing Admin Dashboard via Gateway ($GATEWAY_URL/admin) ---${NC}"
+# 5. Admin Dashboard via Gateway
+echo -e "\n${BLUE}--- 5. Testing Admin Dashboard via Gateway ($GATEWAY_URL/admin) ---${NC}"
 
 # Admin Login
 adm_login=$(curl -s -X POST "$GATEWAY_URL/admin/auth/login" \

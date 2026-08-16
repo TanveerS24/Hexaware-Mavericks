@@ -69,21 +69,59 @@ def create_access_token(
     return token
 
 
+# JWKS Client for Supabase public keys
+_jwks_client: Optional[jwt.PyJWKClient] = None
+
+def get_jwks_client() -> Optional[jwt.PyJWKClient]:
+    global _jwks_client
+    if _jwks_client is None and settings.SUPABASE_JWKS_URL:
+        try:
+            _jwks_client = jwt.PyJWKClient(settings.SUPABASE_JWKS_URL, cache_jwk_set=True, lifespan=3600)
+        except Exception:
+            _jwks_client = None
+    return _jwks_client
+
+
 def decode_token(token: str) -> Dict[str, Any]:
     """
-    Decode and validate a JWT access token.
+    Decode and validate a JWT access token using either HS256 secret keys
+    or Supabase JWKS asymmetric keys.
     """
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise UnauthorizedError("Access token has expired")
-    except jwt.InvalidTokenError:
-        raise UnauthorizedError("Invalid access token")
+    # 1. Try HS256 with JWT_SECRET_KEY / SUPABASE_SECRET_KEY
+    secrets_to_try = [settings.JWT_SECRET_KEY]
+    if settings.SUPABASE_SECRET_KEY and settings.SUPABASE_SECRET_KEY not in secrets_to_try:
+        secrets_to_try.append(settings.SUPABASE_SECRET_KEY)
+
+    for sec in secrets_to_try:
+        try:
+            payload = jwt.decode(
+                token,
+                sec,
+                algorithms=["HS256", "HS384", "HS512"]
+            )
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise UnauthorizedError("Access token has expired")
+        except jwt.InvalidTokenError:
+            continue
+
+    # 2. Try Supabase JWKS client (RS256 / ES256)
+    jwks = get_jwks_client()
+    if jwks:
+        try:
+            signing_key = jwks.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256", "ES256"]
+            )
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise UnauthorizedError("Access token has expired")
+        except Exception:
+            pass
+
+    raise UnauthorizedError("Invalid access token")
 
 
 async def get_token_from_request(
@@ -131,9 +169,18 @@ async def get_current_user(
     """
     Dependency that fetches the active User instance from database.
     """
-    user_id = int(payload.get("user_id", payload.get("sub", 0)))
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user_id_raw = payload.get("user_id", payload.get("sub"))
+    email_raw = payload.get("email")
+
+    user = None
+    if user_id_raw is not None:
+        if isinstance(user_id_raw, int) or (isinstance(user_id_raw, str) and user_id_raw.isdigit()):
+            result = await db.execute(select(User).where(User.id == int(user_id_raw)))
+            user = result.scalar_one_or_none()
+    
+    if not user and email_raw:
+        result = await db.execute(select(User).where(User.email == email_raw.lower().strip()))
+        user = result.scalar_one_or_none()
 
     if not user:
         raise UnauthorizedError("User account not found")

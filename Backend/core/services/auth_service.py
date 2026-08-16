@@ -60,7 +60,7 @@ class AuthService:
 
     @staticmethod
     async def create_staff_user(db: AsyncSession, data: CreateStaffUserRequest) -> User:
-        """Admin-only: create callcentre, officer, or admin accounts."""
+        """Admin-only: create officer or admin accounts."""
         if data.role == UserRole.CITIZEN:
             raise ValidationError("Citizen accounts should be created via public registration")
 

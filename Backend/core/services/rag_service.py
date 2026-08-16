@@ -44,33 +44,65 @@ class RAGService:
     @staticmethod
     async def get_embedding(text: str) -> List[float]:
         """
-        Retrieves vector embedding from Ollama API or falls back to local deterministic embedding.
+        Retrieves vector embedding from Cloud AI API (Gemini / OpenAI-compatible)
+        or falls back to local deterministic embedding.
         """
-        payload = {
-            "model": settings.OLLAMA_EMBED_MODEL,
-            "prompt": text
-        }
+        if not settings.AI_API_KEY:
+            return generate_fallback_embedding(text, settings.EMBEDDING_DIMENSION)
+
+        # Anthropic Claude does not provide native embeddings API; use fallback deterministic embeddings
+        if (settings.AI_PROVIDER in ["claude", "anthropic"] or "claude" in settings.AI_MODEL.lower()) and not settings.AI_BASE_URL:
+            return generate_fallback_embedding(text, settings.EMBEDDING_DIMENSION)
+
         try:
-            async with httpx.AsyncClient(timeout=6.0) as client:
-                resp = await client.post(
-                    f"{settings.OLLAMA_BASE_URL}/api/embeddings",
-                    json=payload
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    embedding = data.get("embedding")
-                    if embedding and isinstance(embedding, list) and len(embedding) > 0:
-                        # Ensure dimension matches 768
-                        if len(embedding) == settings.EMBEDDING_DIMENSION:
-                            return [float(x) for x in embedding]
-                        elif len(embedding) > settings.EMBEDDING_DIMENSION:
-                            return [float(x) for x in embedding[:settings.EMBEDDING_DIMENSION]]
-                        else:
-                            # Pad
-                            pad = [0.0] * (settings.EMBEDDING_DIMENSION - len(embedding))
-                            return [float(x) for x in embedding] + pad
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                # 1. Google Gemini Embeddings API
+                if settings.AI_PROVIDER == "gemini" or ("gemini" in settings.AI_MODEL.lower() and "text-embedding" in settings.AI_EMBEDDING_MODEL.lower()):
+                    base_url = settings.AI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta"
+                    model_name = settings.AI_EMBEDDING_MODEL if "models/" in settings.AI_EMBEDDING_MODEL else f"models/{settings.AI_EMBEDDING_MODEL}"
+                    url = f"{base_url}/{model_name}:embedContent?key={settings.AI_API_KEY}"
+                    payload = {
+                        "content": {"parts": [{"text": text[:2000]}]}
+                    }
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        values = data.get("embedding", {}).get("values", [])
+                        if values and isinstance(values, list):
+                            if len(values) == settings.EMBEDDING_DIMENSION:
+                                return [float(x) for x in values]
+                            elif len(values) > settings.EMBEDDING_DIMENSION:
+                                return [float(x) for x in values[:settings.EMBEDDING_DIMENSION]]
+                            else:
+                                pad = [0.0] * (settings.EMBEDDING_DIMENSION - len(values))
+                                return [float(x) for x in values] + pad
+
+                # 2. OpenAI or OpenAI-compatible Embeddings API
+                else:
+                    base_url = (settings.AI_BASE_URL or "https://api.openai.com/v1").rstrip("/")
+                    url = f"{base_url}/embeddings"
+                    headers = {
+                        "Authorization": f"Bearer {settings.AI_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": settings.AI_EMBEDDING_MODEL,
+                        "input": text[:2000]
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        values = data.get("data", [{}])[0].get("embedding", [])
+                        if values and isinstance(values, list):
+                            if len(values) == settings.EMBEDDING_DIMENSION:
+                                return [float(x) for x in values]
+                            elif len(values) > settings.EMBEDDING_DIMENSION:
+                                return [float(x) for x in values[:settings.EMBEDDING_DIMENSION]]
+                            else:
+                                pad = [0.0] * (settings.EMBEDDING_DIMENSION - len(values))
+                                return [float(x) for x in values] + pad
         except Exception as e:
-            logger.debug(f"Ollama embedding unavailable ({str(e)}). Using local vector embedding generator.")
+            logger.debug(f"Cloud AI embedding API unavailable ({str(e)}). Using deterministic fallback.")
 
         return generate_fallback_embedding(text, settings.EMBEDDING_DIMENSION)
 

@@ -1,12 +1,12 @@
-# 🏛️ AI-Powered Citizen Call Intelligence Platform — Backend
+# 🏛️ Citizen Intelligence Platform — Backend
 
-A production-grade, modular, asynchronous FastAPI backend designed for municipal grievance redressal, smart call triage, automated Speech-to-Text & LLM classification, duplicate detection via vector similarity (`pgvector`), and progressive credibility management.
+A production-grade, modular, asynchronous FastAPI backend designed for municipal grievance redressal, automated Speech-to-Text & Cloud AI classification, duplicate detection via vector similarity (`pgvector`), Supabase database & auth integration, and progressive credibility management.
 
 ---
 
 ## 📑 Table of Contents
 1. [Architecture & Network Ports](#-architecture--network-ports)
-2. [Quick Start with Docker](#-quick-start-with-docker)
+2. [Quick Start & Setup](#-quick-start--setup)
 3. [Pre-Seeded Demo Accounts](#-pre-seeded-demo-accounts)
 4. [Centralized API Gateway & Authentication](#-centralized-api-gateway--authentication)
 5. [Credibility & Progressive Blocking System](#-credibility--progressive-blocking-system)
@@ -18,7 +18,7 @@ A production-grade, modular, asynchronous FastAPI backend designed for municipal
 
 ## 🌐 Architecture & Network Ports
 
-All services are bound to `0.0.0.0` inside Docker Compose, allowing teammates on the same local network or VPN to connect their frontend apps directly to your machine's IP address (`http://<YOUR_LAN_IP>:<PORT>`).
+The backend provides three distinct portals via a single shared `core/` package and a Centralized API Gateway:
 
 ```
                               [ Teammate Frontends / Mobile Apps ]
@@ -30,21 +30,21 @@ All services are bound to `0.0.0.0` inside Docker Compose, allowing teammates on
                               │   - Swagger Docs: /docs         │
                               └────────────────┬────────────────┘
                                                │
-               ┌────────────────┬──────────────┼────────────────┬────────────────┐
-               │                │              │                │                │
-               ▼                ▼              ▼                ▼                ▼
-        ┌──────────────┐ ┌──────────────┐┌──────────────┐┌──────────────┐ ┌──────────────┐
-        │ Citizen API  │ │ Call Centre  ││ Officer API  ││  Admin API   │ │ PostgreSQL   │
-        │  Port: 8001  │ │  Port: 8002  ││  Port: 8003  ││  Port: 8004  │ │  (pgvector)  │
-        └──────┬───────┘ └──────┬───────┘└──────┬───────┘└──────┬───────┘ └──────┬───────┘
-               │                │              │                │                │
-               └────────────────┴──────────────┴────────────────┴────────────────┘
+               ┌───────────────────────────────┼───────────────────────────────┐
+               │                               │                               │
+               ▼                               ▼                               ▼
+        ┌──────────────┐                ┌──────────────┐                ┌──────────────┐
+        │ Citizen API  │                │ Officer API  │                │  Admin API   │
+        │  Port: 8001  │                │  Port: 8003  │                │  Port: 8004  │
+        └──────┬───────┘                └──────┬───────┘                └──────┬───────┘
+               │                               │                               │
+               └───────────────────────────────┼───────────────────────────────┘
                                                │
                                                ▼
-                                      ┌─────────────────┐
-                                      │  Ollama Engine  │
-                                      │   Port: 11434   │
-                                      └─────────────────┘
+                    ┌─────────────────────────────────────────────────────┐
+                    │  Supabase (PostgreSQL 16 + pgvector + Auth / JWKS)  │
+                    │  Cloud AI API (Gemini / OpenAI LLM + Embeddings)    │
+                    └─────────────────────────────────────────────────────┘
 ```
 
 ### Exposed Port Table
@@ -52,41 +52,44 @@ All services are bound to `0.0.0.0` inside Docker Compose, allowing teammates on
 | :--- | :--- | :--- | :--- |
 | **API Gateway** | **`8000`** | **Primary unified entry point for all frontends** | `http://<IP>:8000/docs` |
 | **Citizen API** | `8001` | Citizen self-service, grievance filing, RAG chatbot | `http://<IP>:8001/docs` |
-| **Call Centre API** | `8002` | Priority triage queue, forwarding, manual ticket logging | `http://<IP>:8002/docs` |
 | **Officer API** | `8003` | Scoped department queue, optimistic lock claim, resolution | `http://<IP>:8003/docs` |
 | **Admin API** | `8004` | Staff management, block rules, credibility, analytics, SLA | `http://<IP>:8004/docs` |
-| **PostgreSQL** | `5432` | Postgres 16 with `pgvector` extension enabled | — |
-| **Ollama AI** | `11434` | Local LLM inference & Vector Embeddings | — |
 
 ---
 
-## 🚀 Quick Start with Docker
+## 🚀 Quick Start & Setup
 
 ### Prerequisites
-- Docker & Docker Compose installed and running.
+- Python 3.11+
+- Virtual environment (`venv` or `conda`)
 
-### 1. Start the Complete Stack
+### 1. Install Dependencies
 ```bash
-# Clone and enter directory
-git clone <repo-url>
-cd Mavericks
+cd Backend
+python -m venv venv
+# Windows:
+.\venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
 
-# Copy environment variables (pre-configured for Docker network)
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment (`.env`)
+```bash
 cp .env.example .env
-
-# Start all containers in background
-docker compose up -d --build
+# Edit .env to set your SUPABASE_URL, SUPABASE credentials, and AI_API_KEY
 ```
 
-### 2. Verify Container Health
+### 3. Run Migrations & Seed Data
 ```bash
-docker compose ps
+alembic upgrade head
+python scripts/seed.py
 ```
-The entrypoint automatically waits for PostgreSQL, applies Alembic migrations, and seeds initial master data and demo accounts.
 
-### 3. Run the Automated Live Integration Test
+### 4. Start the Central API Gateway
 ```bash
-bash scripts/test_curl_all.sh
+python -m gateway_api.main
 ```
 
 ---
@@ -96,7 +99,6 @@ bash scripts/test_curl_all.sh
 | Role | Email | Password | Scope / Permissions |
 | :--- | :--- | :--- | :--- |
 | **Administrator** | `admin@city.gov` | `Admin@123` | City-wide oversight, block issuance, SLA config, staff management |
-| **Call Centre Agent** | `callcentre1@city.gov` | `Agent@123` | City priority queue, ticket forwarding, direct resolution, spam flags |
 | **Field Officer (Water)** | `officer.water@city.gov` | `Officer@123` | Scoped to Water & Sanitation department |
 | **Field Officer (Power)** | `officer.power@city.gov` | `Officer@123` | Scoped to Electricity & Power department |
 | **Citizen (Standard)** | `citizen.jane@example.com` | `Citizen@123` | Credibility: `1.0`, Active, can file grievances & chat |
@@ -107,10 +109,11 @@ bash scripts/test_curl_all.sh
 ## 🛡️ Centralized API Gateway & Authentication
 
 ### Security Architecture
+- **Supabase JWKS + Native JWT Validation**: Seamlessly decodes and verifies tokens from Supabase Auth or internal signing keys.
 - **Stateless JWT Access Tokens**: 15-minute expiration, contains `user_id`, `role`, `department_id`.
 - **Rotated Refresh Tokens**: Stored server-side as SHA-256 hashes. Rotated upon every refresh request.
 - **Token Reuse Detection**: If a revoked refresh token is submitted (stolen token attack), the platform automatically invalidates **all** active sessions for that user.
-- **Authentication Middleware**: Centralized on the API Gateway and portal services. Automatically validates JWTs on all private routes while strictly excluding public endpoints (`/health`, `/docs`, `/citizen/auth/*`, `/callcentre/auth/login`, `/officer/auth/login`, `/admin/auth/login`, `/citizen/faq`, `/citizen/announcements`).
+- **Authentication Middleware**: Centralized on the API Gateway and portal services. Automatically validates JWTs on all private routes while strictly excluding public endpoints (`/health`, `/docs`, `/citizen/auth/*`, `/officer/auth/login`, `/admin/auth/login`, `/citizen/faq`, `/citizen/announcements`).
 
 ---
 
@@ -118,19 +121,17 @@ bash scripts/test_curl_all.sh
 
 ### Credibility Score Dynamics
 1. **Initial Score**: New citizen accounts start with `1.0`.
-2. **Malicious Grievance Penalty**: When a call centre agent or field officer marks an issue as `malicious`, the citizen's score is penalized by `0.15`:
+2. **Malicious Grievance Penalty**: When a field officer or admin marks an issue as `malicious`, the citizen's score is penalized by `0.15`:
    $$\text{Score}_{\text{new}} = \max(0.0, \text{Score}_{\text{old}} - 0.15)$$
 3. **Low Credibility Alert**: If a citizen's score drops below `0.5`, an automated high-priority alert is generated for city administrators. **Citizens are not auto-blocked** — blocking requires administrative review.
 
 ### Progressive Block Escalation Tiers
-When an administrator reviews a low-credibility citizen via `GET /admin/users/{id}/block-suggest`, the system auto-suggests the duration tier:
 - **1st Block**: `3d` (3 days)
 - **2nd Block**: `10d` (10 days)
 - **3rd Block**: `30d` (30 days)
 - **4th+ Block**: `permanent` (Flips user status to `banned`)
 
 ### Gradual Credibility Recovery Formula
-When a temporary block expires, credibility recovers smoothly without background cron jobs (lazily computed on read):
 $$\text{Recovery Period (Days)} = 2 \times \text{Block Duration (Days)}$$
 $$\text{Daily Recovery Rate} = \frac{0.70 - \text{Score at Unblock}}{\text{Recovery Period}}$$
 $$\text{Current Score} = \min(0.70, \text{Score at Unblock} + \text{Daily Rate} \times \text{Days Since Unblock})$$
@@ -148,7 +149,7 @@ fetch('http://<YOUR_IP>:8000/citizen/me', {
 ```
 
 ### Mobile Frontends (Flutter / React Native / Swift / Kotlin)
-Tokens are returned in the JSON response body. Store `refresh_token` securely in iOS Keychain / Android Keystore:
+Tokens are returned in the JSON response body:
 ```json
 {
   "access_token": "eyJhbGciOi...",
@@ -184,17 +185,6 @@ All endpoints can be called via the Central Gateway `http://<IP>:8000` or indivi
 | `GET` | `/citizen/announcements`| No | Public municipal announcements |
 | `GET` | `/citizen/notifications`| **Yes** | Citizen alerts and grievance updates |
 
-### 🎧 Call Centre Portal (`/callcentre`)
-| Method | Endpoint | Auth Required | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/callcentre/auth/login` | No | Agent login |
-| `GET` | `/callcentre/queue` | **Yes (CallCentre/Admin)** | Priority queue (High → Medium → Low) with filters |
-| `GET` | `/callcentre/issues/{id}` | **Yes** | Full issue inspection |
-| `POST` | `/callcentre/issues` | **Yes** | Manual ticket creation on citizen's behalf |
-| `PATCH`| `/callcentre/issues/{id}/forward` | **Yes** | Forward grievance to department claim pool |
-| `PATCH`| `/callcentre/issues/{id}/resolve` | **Yes** | Directly resolve simple grievances |
-| `PATCH`| `/callcentre/issues/{id}/mark-malicious` | **Yes** | Flag malicious issue & penalize citizen |
-
 ### 👷 Officer Portal (`/officer`)
 | Method | Endpoint | Auth Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -209,7 +199,7 @@ All endpoints can be called via the Central Gateway `http://<IP>:8000` or indivi
 | Method | Endpoint | Auth Required | Description |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/admin/auth/login` | No | Administrator login |
-| `POST` | `/admin/users` | **Yes (Admin)** | Provision callcentre, officer, or admin accounts |
+| `POST` | `/admin/users` | **Yes (Admin)** | Provision officer or admin accounts |
 | `GET` | `/admin/users` | **Yes (Admin)** | List platform users with role/status filters |
 | `GET` | `/admin/issues` | **Yes (Admin)** | City-wide grievance search and inspection |
 | `GET` | `/admin/analytics/summary` | **Yes (Admin)** | High-level metrics, SLA compliance rate |
@@ -228,12 +218,7 @@ All endpoints can be called via the Central Gateway `http://<IP>:8000` or indivi
 
 ## 🧪 Running Tests
 
-### 1. Pytest Unit & Integration Tests
 ```bash
+cd Backend
 pytest tests/ -v
-```
-
-### 2. Live Docker HTTP / Curl Suite
-```bash
-bash scripts/test_curl_all.sh
 ```

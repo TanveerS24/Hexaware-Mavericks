@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnnouncementCreateRequest(BaseModel):
@@ -9,14 +9,13 @@ class AnnouncementCreateRequest(BaseModel):
 
 
 class AnnouncementResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     body: str
     published_by_admin_id: Optional[int] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class AnnouncementListResponse(BaseModel):

@@ -15,11 +15,6 @@ from citizen_api.routers import (
     announcements as citizen_announcements,
     notifications as citizen_notifications
 )
-from callcentre_api.routers import (
-    auth as cc_auth,
-    queue as cc_queue,
-    issues as cc_issues
-)
 from officer_api.routers import (
     auth as officer_auth,
     queue as officer_queue,
@@ -41,7 +36,7 @@ app = FastAPI(
     title=f"{settings.APP_NAME} - Centralized API Gateway",
     description=(
         "Unified Municipal API Gateway orchestrating all requests across Citizen, "
-        "Call Centre, Field Officer, and Admin portals with centralized authentication, "
+        "Field Officer, and Admin portals with centralized authentication, "
         "rate limiting, and CORS enforcement."
     ),
     version="1.0.0",
@@ -70,7 +65,6 @@ app.add_middleware(
         r"^/citizen/faq/?.*",
         r"^/citizen/announcements/?.*",
         r"^/citizen/chatbot/?.*",
-        r"^/callcentre/auth/.*",
         r"^/officer/auth/.*",
         r"^/admin/auth/.*"
     ]
@@ -96,11 +90,6 @@ app.include_router(citizen_chatbot.router, prefix="/citizen")
 app.include_router(citizen_faq.router, prefix="/citizen")
 app.include_router(citizen_announcements.router, prefix="/citizen")
 app.include_router(citizen_notifications.router, prefix="/citizen")
-
-# --- Call Centre Routes (/callcentre) ---
-app.include_router(cc_auth.router, prefix="/callcentre")
-app.include_router(cc_queue.router, prefix="/callcentre")
-app.include_router(cc_issues.router, prefix="/callcentre")
 
 # --- Officer Dashboard Routes (/officer) ---
 app.include_router(officer_auth.router, prefix="/officer")
@@ -132,7 +121,6 @@ async def gateway_health():
         "version": "1.0.0",
         "portals": {
             "citizen": "/citizen",
-            "callcentre": "/callcentre",
             "officer": "/officer",
             "admin": "/admin"
         },

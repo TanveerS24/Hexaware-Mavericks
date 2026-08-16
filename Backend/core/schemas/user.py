@@ -10,8 +10,8 @@ class CreateStaffUserRequest(BaseModel):
     email: EmailStr
     phone: Optional[str] = Field(None, min_length=8, max_length=20)
     password: str = Field(..., min_length=6, max_length=100)
-    role: UserRole = Field(..., description="Role must be callcentre, officer, or admin")
-    department_id: Optional[int] = Field(None, description="Department ID for officer/callcentre")
+    role: UserRole = Field(..., description="Role must be officer or admin")
+    department_id: Optional[int] = Field(None, description="Department ID for field officer")
 
 
 class UserListResponse(BaseModel):

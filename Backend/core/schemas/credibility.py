@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class CredibilityLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     delta: float
@@ -11,11 +13,10 @@ class CredibilityLogResponse(BaseModel):
     issue_id: Optional[int] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class LowCredibilityUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
     name: str
     email: str
@@ -25,9 +26,6 @@ class LowCredibilityUserResponse(BaseModel):
     is_blocked: bool
     blocked_until: Optional[datetime] = None
     total_flags: int
-
-    class Config:
-        from_attributes = True
 
 
 class CredibilityHistoryResponse(BaseModel):
