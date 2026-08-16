@@ -132,7 +132,8 @@ Analyze the following citizen complaint and return ONLY a valid JSON object matc
   "category": "Road and transport | water and sewage | electricity",
   "priority": "high | medium | low",
   "summary": "1-2 sentence concise neutral summary of the core issue",
-  "sentiment": "urgent | frustrated | neutral | positive"
+  "sentiment": "urgent | frustrated | neutral | positive",
+  "english_translation": "Accurate English translation of the complaint if it is in another language, otherwise exact same text"
 }}
 
 Complaint Transcript:
@@ -145,6 +146,12 @@ Response:"""
                 provider = getattr(settings, "AI_PROVIDER", "gemini")
                 ai_model = getattr(settings, "AI_MODEL", "gemini-2.5-flash")
                 ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
+
+                # Auto-detect Grok xAI API Key
+                if ai_api_key.startswith("xai-"):
+                    provider = "grok"
+                    ai_model = "grok-beta"
+                    settings.AI_BASE_URL = "https://api.x.ai/v1"
 
                 # 1. Anthropic Claude API
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
@@ -179,7 +186,8 @@ Response:"""
                                 "category": parsed.get("category", "Municipal Administration"),
                                 "priority": valid_priority,
                                 "summary": parsed.get("summary", transcript[:150]),
-                                "sentiment": parsed.get("sentiment", "neutral")
+                                "sentiment": parsed.get("sentiment", "neutral"),
+                                "english_translation": parsed.get("english_translation", transcript)
                             }
 
                 # 2. Google Gemini API
@@ -209,7 +217,8 @@ Response:"""
                                 "category": parsed.get("category", "Municipal Administration"),
                                 "priority": valid_priority,
                                 "summary": parsed.get("summary", transcript[:150]),
-                                "sentiment": parsed.get("sentiment", "neutral")
+                                "sentiment": parsed.get("sentiment", "neutral"),
+                                "english_translation": parsed.get("english_translation", transcript)
                             }
 
                 # 3. OpenAI or OpenAI-compatible API
@@ -241,7 +250,8 @@ Response:"""
                             "category": parsed.get("category", "Municipal Administration"),
                             "priority": valid_priority,
                             "summary": parsed.get("summary", transcript[:150]),
-                            "sentiment": parsed.get("sentiment", "neutral")
+                            "sentiment": parsed.get("sentiment", "neutral"),
+                            "english_translation": parsed.get("english_translation", transcript)
                         }
         except Exception as e:
             logger.warning(f"Cloud AI API request failed ({str(e)}). Using fallback classification.")

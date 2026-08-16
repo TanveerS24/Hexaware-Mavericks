@@ -136,6 +136,10 @@ class IssueService:
         priority = IssuePriority(priority_str) if priority_str in [e.value for e in IssuePriority] else IssuePriority.MEDIUM
         summary = ai_res["summary"]
         sentiment = ai_res["sentiment"]
+        
+        # Override transcript with translated English version if available
+        if "english_translation" in ai_res and ai_res["english_translation"]:
+            transcript = ai_res["english_translation"]
 
         # Geocoding ward
         ward = data.ward or stub_reverse_geocode(data.location_lat, data.location_lng)

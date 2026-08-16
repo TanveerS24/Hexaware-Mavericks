@@ -9,6 +9,7 @@ const Dashboard = () => {
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState('');
   const [time, setTime] = useState(0);
+  const [language, setLanguage] = useState('en-US');
   
   // Process State
   const [step, setStep] = useState(1); // 1: Input, 2: Transcribe/Edit, 3: Location, 4: Result
@@ -57,7 +58,7 @@ const Dashboard = () => {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = language;
 
     recognition.onresult = (event) => {
       let currentTranscript = '';
@@ -177,7 +178,30 @@ const Dashboard = () => {
           
           <div style={{ marginBottom: '2rem' }}>
             {!recording ? (
-              <button className="mic-btn" onClick={startRecording} title="Start Recording">🎤</button>
+              <>
+                <div className="mb-3">
+                  <select 
+                    className="form-control" 
+                    style={{maxWidth: '200px', margin: '0 auto', display: 'inline-block'}} 
+                    value={language} 
+                    onChange={(e) => setLanguage(e.target.value)}
+                  >
+                    <option value="en-US">English</option>
+                    <option value="te-IN">Telugu (తెలుగు)</option>
+                    <option value="hi-IN">Hindi (हिंदी)</option>
+                    <option value="ta-IN">Tamil (தமிழ்)</option>
+                    <option value="mr-IN">Marathi (मराठी)</option>
+                    <option value="bn-IN">Bengali (বাংলা)</option>
+                    <option value="gu-IN">Gujarati (ગુજરાતી)</option>
+                    <option value="kn-IN">Kannada (ಕನ್ನಡ)</option>
+                    <option value="ml-IN">Malayalam (മലയാളം)</option>
+                    <option value="pa-IN">Punjabi (ਪੰਜਾਬੀ)</option>
+                    <option value="ur-IN">Urdu (اردو)</option>
+                    <option value="or-IN">Odia (ଓଡ଼ିଆ)</option>
+                  </select>
+                </div>
+                <button className="mic-btn" onClick={startRecording} title="Start Recording">🎤</button>
+              </>
             ) : (
               <div className="text-center">
                 <button className="mic-btn recording" onClick={stopRecording} title="Stop Recording">⏹️</button>
