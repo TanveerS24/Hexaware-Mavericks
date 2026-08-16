@@ -16,9 +16,12 @@ class GeminiProvider:
     def get_client() -> Optional[genai.Client]:
         # Fallback to AI_API_KEY if GOOGLE_API_KEY isn't explicitly set
         api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", None))
-        if not api_key:
+        try:
+            return genai.Client(api_key=api_key)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to initialize Gemini Client: {e}")
             return None
-        return genai.Client(api_key=api_key)
 
     @staticmethod
     async def query_citizen_chatbot(context_data: str, user_query: str) -> Optional[str]:
