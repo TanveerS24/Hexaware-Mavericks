@@ -259,6 +259,75 @@ Response:"""
         return cls._heuristic_classify(transcript)
 
     @classmethod
+    async def translate_text(cls, text: str) -> str:
+        """
+        Translates text to English using the configured AI provider.
+        """
+        if not getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", None)):
+            return text
+
+        prompt = f"Translate the following text to English accurately. Return ONLY the English translation, nothing else.\n\nText: {text}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                provider = getattr(settings, "AI_PROVIDER", "gemini")
+                ai_model = getattr(settings, "AI_MODEL", "gemini-2.5-flash")
+                ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
+
+                if ai_api_key.startswith("xai-"):
+                    provider = "grok"
+                    ai_model = "grok-beta"
+                    settings.AI_BASE_URL = "https://api.x.ai/v1"
+
+                # 1. Anthropic
+                if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
+                    url = f"{base_url}/messages"
+                    headers = {"x-api-key": ai_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+                    payload = {
+                        "model": ai_model if "claude" in ai_model.lower() else "claude-3-5-haiku-20241022",
+                        "max_tokens": 1024,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.1
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        content_blocks = resp.json().get("content", [])
+                        if content_blocks and content_blocks[0].get("type") == "text":
+                            return content_blocks[0].get("text", "").strip()
+
+                # 2. Google Gemini
+                elif provider == "gemini" or "gemini" in ai_model.lower():
+                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+                    model_name = ai_model if "models/" in ai_model else f"models/{ai_model}"
+                    url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
+                    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        candidates = resp.json().get("candidates", [])
+                        if candidates:
+                            return candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+
+                # 3. OpenAI or Grok
+                else:
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                    url = f"{base_url}/chat/completions"
+                    headers = {"Authorization": f"Bearer {ai_api_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": ai_model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.1
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        return resp.json()["choices"][0]["message"]["content"].strip()
+
+        except Exception as e:
+            logger.warning(f"Translation API request failed ({str(e)}).")
+
+        return text
+
+    @classmethod
     async def query_citizen_chatbot(cls, context_data: str, user_query: str) -> str:
         """
         Query Gemini based on citizen's complaint history context.

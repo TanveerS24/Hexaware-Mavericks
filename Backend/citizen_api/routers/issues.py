@@ -47,6 +47,25 @@ async def transcribe_audio(
     return {"transcript": transcript}
 
 
+from pydantic import BaseModel
+class TranslationRequest(BaseModel):
+    text: str
+
+@router.post("/translate", response_model=dict, status_code=status.HTTP_200_OK)
+async def translate_text(
+    req: TranslationRequest,
+    current_user: User = Depends(require_not_blocked)
+):
+    """
+    Translate citizen speech to English.
+    """
+    if not req.text:
+        return {"english_translation": ""}
+        
+    translation = await AIService.translate_text(req.text)
+    return {"english_translation": translation}
+
+
 @router.post("", response_model=IssueResponse, status_code=status.HTTP_201_CREATED)
 async def create_issue(
     data: Optional[IssueCreateRequest] = None,

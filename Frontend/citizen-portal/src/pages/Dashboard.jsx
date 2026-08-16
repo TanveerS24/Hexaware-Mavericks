@@ -17,6 +17,7 @@ const Dashboard = () => {
   
   // Complaint State
   const [transcript, setTranscript] = useState('');
+  const [englishTranslation, setEnglishTranslation] = useState('');
   const [location, setLocation] = useState({ area: '', city: '', state: '', postal_code: '', latitude: '', longitude: '' });
   const [useRegisteredLocation, setUseRegisteredLocation] = useState(false);
   
@@ -87,13 +88,26 @@ const Dashboard = () => {
     timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
       clearInterval(timerRef.current);
       if (transcript.trim().length > 0) {
-        setStep(2);
+        setProcessing(true);
+        try {
+          const token = localStorage.getItem('access_token');
+          const res = await api.post('/issues/translate', { text: transcript }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setEnglishTranslation(res.data.english_translation || transcript);
+        } catch (err) {
+          console.error("Translation failed", err);
+          setEnglishTranslation(transcript);
+        } finally {
+          setProcessing(false);
+          setStep(2);
+        }
       } else {
         setError("Could not hear anything. Please try again.");
       }
@@ -119,7 +133,7 @@ const Dashboard = () => {
     setError('');
     try {
       const formData = new FormData();
-      formData.append('transcript', transcript);
+      formData.append('transcript', englishTranslation || transcript);
       
       const locData = useRegisteredLocation && user ? {
         ward: user.area,
@@ -234,15 +248,28 @@ const Dashboard = () => {
 
       {step === 2 && (
         <div className="card">
-          <h3>Your Transcription</h3>
-          <p className="text-secondary">Please review and edit if necessary.</p>
+          <h3>Review Transcription</h3>
+          <p className="text-secondary">Please review your original text and the English translation.</p>
           
           <div className="form-group mt-3">
+            <label>Original Spoken Text</label>
             <textarea 
               className="form-control" 
-              rows="6" 
+              rows="4" 
               value={transcript} 
               onChange={(e) => setTranscript(e.target.value)}
+              style={{background: '#f8f9fa'}}
+            />
+          </div>
+
+          <div className="form-group mt-3">
+            <label>English Translation (This will be saved to the database)</label>
+            <textarea 
+              className="form-control" 
+              rows="4" 
+              value={englishTranslation} 
+              onChange={(e) => setEnglishTranslation(e.target.value)}
+              style={{border: '1px solid var(--primary-blue)'}}
             />
           </div>
           
@@ -285,7 +312,7 @@ const Dashboard = () => {
 
           <div className="mt-4 p-3 mb-4" style={{ background: 'var(--background)', borderRadius: 'var(--radius)' }}>
             <h5>Review Complaint</h5>
-            <p><strong>Complaint:</strong> {transcript}</p>
+            <p><strong>Complaint (English):</strong> {englishTranslation || transcript}</p>
           </div>
 
           <div className="grid grid-2 mt-4">
