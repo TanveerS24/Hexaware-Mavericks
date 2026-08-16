@@ -155,7 +155,8 @@ const Dashboard = () => {
       setTranscript(sttText);
       setStep(2);
     } catch (err) {
-      setError('Failed to transcribe audio. Ensure your backend has a valid Gemini STT API key configured.');
+      const errMsg = err.response?.data?.detail || err.message || 'Unknown error occurred.';
+      setError(`Failed to transcribe audio: ${errMsg}`);
     } finally {
       setProcessing(false);
     }
