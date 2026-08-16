@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     AI_BASE_URL: Optional[str] = None
     ENABLE_MOCK_AI_FALLBACK: bool = True
     EMBEDDING_DIMENSION: int = 768
+    
+    # Gemini AI Configuration
+    GOOGLE_API_KEY: str = ""
 
     # Portal Ports
     CITIZEN_API_PORT: int = 8001

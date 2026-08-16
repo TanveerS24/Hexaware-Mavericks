@@ -57,6 +57,7 @@ class Issue(Base):
     location_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     location_lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     ward: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual")
     transcript: Mapped[str] = mapped_column(Text, nullable=False)
     audio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

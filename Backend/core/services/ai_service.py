@@ -3,23 +3,62 @@ import logging
 import re
 from typing import Dict, Any, Optional
 import httpx
+from google import genai
+from google.genai import types
 
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
+class GeminiProvider:
+    @staticmethod
+    def get_client() -> Optional[genai.Client]:
+        # Fallback to AI_API_KEY if GOOGLE_API_KEY isn't explicitly set
+        api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", None))
+        if not api_key:
+            return None
+        return genai.Client(api_key=api_key)
+
+    @staticmethod
+    async def query_citizen_chatbot(context_data: str, user_query: str) -> Optional[str]:
+        client = GeminiProvider.get_client()
+        if not client:
+            return None
+        
+        prompt = f"""You are a helpful AI assistant for the Citizen Grievance Portal.
+Use ONLY the following context about the citizen's active complaints to answer their question.
+If the answer is not contained in the context, politely inform them that you do not have that information.
+Do NOT invent or hallucinate information.
+
+Context (Citizen's Complaints):
+{context_data}
+
+Citizen's Question:
+{user_query}
+
+Answer:"""
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini chatbot query failed: {e}")
+            return None
+
+
 class AIService:
     """
-    Handles Speech-to-Text transcription and Cloud AI API (Gemini / OpenAI-compatible)
+    Handles Speech-to-Text transcription and Cloud AI API (Gemini / OpenAI-compatible / Claude)
     structured complaint classification with robust heuristic fallback.
     """
 
     @staticmethod
-    async def transcribe_audio(audio_bytes: bytes, filename: str = "audio.wav") -> str:
+    async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/mp3", filename: str = "audio.wav") -> str:
         """
         Transcribe audio input into plain text.
-        Stubs or calls STT engine, with intelligent fallback.
         """
         if not audio_bytes or len(audio_bytes) < 10:
             return "Citizen complaint submitted via audio recording."
@@ -35,47 +74,28 @@ class AIService:
         Rule-based classifier used as an instant, zero-downtime fallback.
         """
         lower = text.lower()
-
-        # Category determination
         if any(w in lower for w in ["water", "pipe", "leak", "drain", "sewage", "tap", "drinking"]):
-            category = "Water & Sanitation"
+            category = "water and sewage"
+            department = "water and sewage"
         elif any(w in lower for w in ["electric", "power", "wire", "light", "transformer", "spark", "blackout", "pole"]):
-            category = "Electricity & Power"
-        elif any(w in lower for w in ["road", "pothole", "traffic", "signal", "pavement", "bridge", "asphalt"]):
-            category = "Roads & Infrastructure"
-        elif any(w in lower for w in ["garbage", "trash", "waste", "dump", "smell", "clean", "debris"]):
-            category = "Waste Management"
-        elif any(w in lower for w in ["hospital", "clinic", "mosquito", "dengue", "fever", "dog", "vaccine"]):
-            category = "Public Health"
+            category = "electricity"
+            department = "electricity"
+        elif any(w in lower for w in ["road", "transport", "bus", "pothole", "traffic", "street"]):
+            category = "Road and transport"
+            department = "Road and transport"
         else:
-            category = "Municipal Administration"
+            category = "general"
+            department = "Road and transport"
 
-        # Priority determination
-        if any(w in lower for w in ["danger", "spark", "fire", "emergency", "burst", "hazard", "overflowing", "live wire", "death"]):
-            priority = "high"
-        elif any(w in lower for w in ["broken", "not working", "smell", "delay", "pothole", "leak", "complaint"]):
-            priority = "medium"
-        else:
-            priority = "low"
-
-        # Sentiment determination
-        if any(w in lower for w in ["danger", "urgent", "immediately", "hazard", "emergency"]):
-            sentiment = "urgent"
-        elif any(w in lower for w in ["terrible", "worst", "angry", "frustrated", "again", "useless"]):
-            sentiment = "frustrated"
-        else:
-            sentiment = "neutral"
-
-        # Summary generation
         summary = text.strip()
         if len(summary) > 160:
             summary = summary[:157] + "..."
 
         return {
             "category": category,
-            "priority": priority,
-            "summary": summary,
-            "sentiment": sentiment
+            "department": department,
+            "confidence": "low",
+            "summary": summary
         }
 
     @classmethod
@@ -84,13 +104,13 @@ class AIService:
         Calls Cloud AI API to classify grievance and extract category, priority, summary, and sentiment.
         Falls back seamlessly to heuristic classifier if API is not configured or fails.
         """
-        if not settings.AI_API_KEY:
+        if not getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", None)):
             return cls._heuristic_classify(transcript)
 
         prompt = f"""You are an AI assistant for a municipal citizen grievance redressal platform.
 Analyze the following citizen complaint and return ONLY a valid JSON object matching this schema:
 {{
-  "category": "Water & Sanitation | Electricity & Power | Roads & Infrastructure | Waste Management | Public Health | Municipal Administration",
+  "category": "Road and transport | water and sewage | electricity",
   "priority": "high | medium | low",
   "summary": "1-2 sentence concise neutral summary of the core issue",
   "sentiment": "urgent | frustrated | neutral | positive"
@@ -103,17 +123,21 @@ Response:"""
 
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
+                provider = getattr(settings, "AI_PROVIDER", "gemini")
+                ai_model = getattr(settings, "AI_MODEL", "gemini-2.5-flash")
+                ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
+
                 # 1. Anthropic Claude API
-                if settings.AI_PROVIDER in ["claude", "anthropic"] or "claude" in settings.AI_MODEL.lower():
-                    base_url = (settings.AI_BASE_URL or "https://api.anthropic.com/v1").rstrip("/")
+                if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {
-                        "x-api-key": settings.AI_API_KEY,
+                        "x-api-key": ai_api_key,
                         "anthropic-version": "2023-06-01",
                         "content-type": "application/json"
                     }
                     payload = {
-                        "model": settings.AI_MODEL if "claude" in settings.AI_MODEL.lower() else "claude-3-5-haiku-20241022",
+                        "model": ai_model if "claude" in ai_model.lower() else "claude-3-5-haiku-20241022",
                         "max_tokens": 1024,
                         "system": "You are an AI assistant for a municipal citizen grievance redressal platform. You output strictly a valid JSON object matching the requested schema with no markdown decoration.",
                         "messages": [
@@ -138,14 +162,12 @@ Response:"""
                                 "summary": parsed.get("summary", transcript[:150]),
                                 "sentiment": parsed.get("sentiment", "neutral")
                             }
-                    else:
-                        logger.warning(f"Claude API request returned status {resp.status_code}: {resp.text}")
 
                 # 2. Google Gemini API
-                elif settings.AI_PROVIDER == "gemini" or "gemini" in settings.AI_MODEL.lower():
-                    base_url = settings.AI_BASE_URL or "https://generativelanguage.googleapis.com/v1beta"
-                    model_name = settings.AI_MODEL if "models/" in settings.AI_MODEL else f"models/{settings.AI_MODEL}"
-                    url = f"{base_url}/{model_name}:generateContent?key={settings.AI_API_KEY}"
+                elif provider == "gemini" or "gemini" in ai_model.lower():
+                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+                    model_name = ai_model if "models/" in ai_model else f"models/{ai_model}"
+                    url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
                     
                     payload = {
                         "contents": [{"parts": [{"text": prompt}]}],
@@ -173,14 +195,14 @@ Response:"""
 
                 # 3. OpenAI or OpenAI-compatible API
                 else:
-                    base_url = (settings.AI_BASE_URL or "https://api.openai.com/v1").rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
-                        "Authorization": f"Bearer {settings.AI_API_KEY}",
+                        "Authorization": f"Bearer {ai_api_key}",
                         "Content-Type": "application/json"
                     }
                     payload = {
-                        "model": settings.AI_MODEL,
+                        "model": ai_model,
                         "messages": [
                             {"role": "system", "content": "You output strictly valid JSON."},
                             {"role": "user", "content": prompt}
@@ -206,3 +228,13 @@ Response:"""
             logger.warning(f"Cloud AI API request failed ({str(e)}). Using fallback classification.")
 
         return cls._heuristic_classify(transcript)
+
+    @classmethod
+    async def query_citizen_chatbot(cls, context_data: str, user_query: str) -> str:
+        """
+        Query Gemini based on citizen's complaint history context.
+        """
+        result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
+        if result:
+            return result
+        return "I apologize, but I am currently unable to process your request. Please try again later."

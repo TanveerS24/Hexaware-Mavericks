@@ -9,6 +9,13 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., examples=["jane@example.com"])
     phone: Optional[str] = Field(None, min_length=8, max_length=20, examples=["+1234567890"])
     password: str = Field(..., min_length=6, max_length=100, examples=["SecretPass123!"])
+    address: Optional[str] = Field(None, examples=["123 Main St"])
+    area: Optional[str] = Field(None, examples=["Downtown"])
+    city: Optional[str] = Field(None, examples=["Metropolis"])
+    state: Optional[str] = Field(None, examples=["NY"])
+    postal_code: Optional[str] = Field(None, examples=["10001"])
+    latitude: Optional[float] = Field(None, examples=[40.7128])
+    longitude: Optional[float] = Field(None, examples=[-74.0060])
 
 
 class LoginRequest(BaseModel):
@@ -44,6 +51,13 @@ class UserResponse(BaseModel):
     department_id: Optional[int] = None
     credibility_score: float
     status: UserStatus
+    address: Optional[str] = None
+    area: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime
 
 
@@ -62,4 +76,11 @@ class MeResponse(BaseModel):
     blocked_until: Optional[datetime] = None
     block_reason: Optional[str] = None
     duration_tier: Optional[str] = None
+    address: Optional[str] = None
+    area: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    postal_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime

@@ -167,6 +167,7 @@ class IssueService:
             location_lng=data.location_lng,
             ward=ward,
             transcript=transcript,
+            source=data.source,
             audio_url=data.audio_url,
             ai_summary=summary,
             sentiment=sentiment,

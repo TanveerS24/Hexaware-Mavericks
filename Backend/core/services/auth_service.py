@@ -49,6 +49,13 @@ class AuthService:
             email=data.email.lower().strip(),
             phone=data.phone.strip() if data.phone else None,
             password_hash=hash_password(data.password),
+            address=data.address.strip() if data.address else None,
+            area=data.area.strip() if data.area else None,
+            city=data.city.strip() if data.city else None,
+            state=data.state.strip() if data.state else None,
+            postal_code=data.postal_code.strip() if data.postal_code else None,
+            latitude=data.latitude,
+            longitude=data.longitude,
             role=UserRole.CITIZEN,
             credibility_score=settings.INITIAL_CREDIBILITY_SCORE,
             status=UserStatus.ACTIVE

@@ -11,6 +11,7 @@ class IssueCreateRequest(BaseModel):
     ward: Optional[str] = None
     audio_url: Optional[str] = None
     category: Optional[str] = None  # Optional override if client provides
+    source: str = Field("manual", description="Source of the complaint")
 
 
 class IssueForwardRequest(BaseModel):
@@ -71,6 +72,7 @@ class IssueResponse(BaseModel):
     location_lat: Optional[float] = None
     location_lng: Optional[float] = None
     ward: Optional[str] = None
+    source: str
     transcript: str
     audio_url: Optional[str] = None
     ai_summary: Optional[str] = None

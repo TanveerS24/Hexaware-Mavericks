@@ -10,6 +10,8 @@ from core.models.knowledge_base import KnowledgeBase
 from core.models.issue_embeddings import IssueEmbedding
 from core.models.sla_config import SLAConfig
 from core.models.notifications import Notification, NotificationType
+from core.models.emergency_contacts import EmergencyContact
+from core.models.user_consents import UserConsent
 
 __all__ = [
     "User",
@@ -30,4 +32,6 @@ __all__ = [
     "SLAConfig",
     "Notification",
     "NotificationType",
+    "EmergencyContact",
+    "UserConsent",
 ]

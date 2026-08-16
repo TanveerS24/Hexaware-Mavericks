@@ -25,6 +25,13 @@ class User(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    area: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role_enum", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,

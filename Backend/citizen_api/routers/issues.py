@@ -25,8 +25,26 @@ from core.schemas.issue import (
 from core.security import get_current_user
 from core.services.block_service import require_not_blocked
 from core.services.issue_service import IssueService
+from core.services.ai_service import AIService
 
 router = APIRouter(prefix="/issues", tags=["Citizen Grievances"])
+
+@router.post("/transcribe", response_model=dict, status_code=status.HTTP_200_OK)
+async def transcribe_audio(
+    audio_file: UploadFile = File(...),
+    current_user: User = Depends(require_not_blocked)
+):
+    """
+    Transcribe audio for citizen review before submission.
+    """
+    audio_bytes = await audio_file.read()
+    mime_type = audio_file.content_type or "audio/mp3"
+    
+    transcript = await AIService.transcribe_audio(audio_bytes, mime_type, audio_file.filename)
+    if not transcript:
+        return {"transcript": "Failed to transcribe audio. Please try again or type your complaint."}
+        
+    return {"transcript": transcript}
 
 
 @router.post("", response_model=IssueResponse, status_code=status.HTTP_201_CREATED)
@@ -37,6 +55,7 @@ async def create_issue(
     location_lng: Optional[float] = Form(None),
     ward: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
+    source: Optional[str] = Form("manual"),
     audio_file: Optional[UploadFile] = File(None),
     current_user: User = Depends(require_not_blocked),
     db: AsyncSession = Depends(get_db)
@@ -59,7 +78,8 @@ async def create_issue(
             location_lat=location_lat,
             location_lng=location_lng,
             ward=ward,
-            category=category
+            category=category,
+            source=source
         )
 
     issue, dup_info = await IssueService.create_citizen_issue(

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.exceptions import register_exception_handlers
 from core.middleware import AuthenticationMiddleware
-from citizen_api.routers import auth, issues, chatbot, faq, announcements, notifications
+from citizen_api.routers import auth, issues, chatbot, faq, announcements, notifications, emergency
 
 app = FastAPI(
     title=f"{settings.APP_NAME} - Citizen Portal API",
@@ -30,7 +30,9 @@ app.add_middleware(
         r"^/announcements/?.*",
         r"^/citizen/announcements/?.*",
         r"^/chatbot/?.*",
-        r"^/citizen/chatbot/?.*"
+        r"^/citizen/chatbot/?.*",
+        r"^/emergency/?.*",
+        r"^/citizen/emergency/?.*"
     ]
 )
 
@@ -61,6 +63,9 @@ app.include_router(announcements.router, prefix="/citizen")
 
 app.include_router(notifications.router)
 app.include_router(notifications.router, prefix="/citizen")
+
+app.include_router(emergency.router)
+app.include_router(emergency.router, prefix="/citizen")
 
 
 @app.get("/health", tags=["System Health"])
