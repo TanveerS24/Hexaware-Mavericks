@@ -71,7 +71,7 @@ class AIService:
             try:
                 # Use gemini-1.5-flash for multimodal transcription
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',
                     contents=[
                         "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
                         types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
@@ -147,7 +147,7 @@ Response:"""
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
                 provider = getattr(settings, "AI_PROVIDER", "gemini")
-                ai_model = getattr(settings, "AI_MODEL", "gemini-2.5-flash")
+                ai_model = getattr(settings, "AI_MODEL", "gemini-1.5-flash")
                 ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
 
                 # Auto-detect Grok xAI API Key
@@ -274,7 +274,7 @@ Response:"""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 provider = getattr(settings, "AI_PROVIDER", "gemini")
-                ai_model = getattr(settings, "AI_MODEL", "gemini-2.5-flash")
+                ai_model = getattr(settings, "AI_MODEL", "gemini-1.5-flash")
                 ai_api_key = getattr(settings, "AI_API_KEY", getattr(settings, "GOOGLE_API_KEY", ""))
 
                 if ai_api_key.startswith("xai-"):
