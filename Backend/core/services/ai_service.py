@@ -19,8 +19,8 @@ class GeminiProvider:
         try:
             return genai.Client(api_key=api_key)
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Failed to initialize Gemini Client: {e}")
+            # We want to know if this is failing
+            settings.GEMINI_INIT_ERROR = str(e)
             return None
 
     @staticmethod
@@ -80,13 +80,11 @@ class AIService:
                 if response and response.text:
                     return response.text.strip()
             except Exception as e:
-                logger.error(f"Gemini audio transcription failed: {e}")
+                return f"DEBUG ERROR (Generate Content Failed): {str(e)}"
 
-        # Fallback if Gemini fails or is not configured
-        return (
-            "The street lights and power line in our block have been sparking dangerously since yesterday. "
-            "Please send an emergency crew to fix the electrical issue."
-        )
+        init_error = getattr(settings, "GEMINI_INIT_ERROR", "Unknown or no client")
+        api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", ""))
+        return f"DEBUG ERROR (Init Failed): {init_error} | Key used starts with: {api_key[:4] if api_key else 'None'}"
 
     @staticmethod
     def _heuristic_classify(text: str) -> Dict[str, Any]:
