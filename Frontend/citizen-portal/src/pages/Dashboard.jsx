@@ -43,31 +43,47 @@ const Dashboard = () => {
     }
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      const chunks = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/mp3' });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setRecording(true);
-      setTime(0);
-      timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
-    } catch (err) {
-      setError('Microphone access denied or unavailable.');
+  const startRecording = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setError("Your browser does not support Speech Recognition. Please use Chrome or Edge.");
+      return;
     }
+    
+    setError('');
+    setTranscript('');
+    setRecording(true);
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let currentTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        currentTranscript += event.results[i][0].transcript + ' ';
+      }
+      setTranscript(currentTranscript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setRecording(false);
+    };
+
+    recognition.onend = () => {
+      setRecording(false);
+      if (transcript.length > 0 || recognitionRef.current?.transcript?.length > 0) {
+        setStep(2);
+      }
+    };
+
+    mediaRecorderRef.current = recognition;
+    recognition.start();
+    
+    setTime(0);
+    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
   };
 
   const stopRecording = () => {
@@ -75,6 +91,11 @@ const Dashboard = () => {
       mediaRecorderRef.current.stop();
       setRecording(false);
       clearInterval(timerRef.current);
+      if (transcript.trim().length > 0) {
+        setStep(2);
+      } else {
+        setError("Could not hear anything. Please try again.");
+      }
     }
   };
 
@@ -87,29 +108,9 @@ const Dashboard = () => {
   };
 
   const processAudio = async () => {
-    if (!audioBlob) return;
-    setProcessing(true);
-    setError('');
-    
-    try {
-      const formData = new FormData();
-      formData.append('audio_file', audioBlob, 'complaint.mp3');
-      
-      const token = localStorage.getItem('access_token');
-      const response = await api.post('/issues/transcribe', formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      setTranscript(response.data.transcript);
-      setStep(2);
-    } catch (err) {
-      setError('Failed to transcribe audio.');
-    } finally {
-      setProcessing(false);
-    }
+    // This is kept for file upload fallback if needed, but since we have no STT backend,
+    // we just skip it or warn the user.
+    setError('Audio file upload requires a cloud STT API key. Please use the microphone button instead for instant browser transcription.');
   };
 
   const submitComplaint = async () => {
@@ -180,7 +181,10 @@ const Dashboard = () => {
             ) : (
               <div className="text-center">
                 <button className="mic-btn recording" onClick={stopRecording} title="Stop Recording">⏹️</button>
-                <div className="mt-2 text-danger">🔴 Recording... {formatTime(time)}</div>
+                <div className="mt-2 text-danger">🔴 Recording & Transcribing... {formatTime(time)}</div>
+                <div className="mt-3 p-3" style={{background: '#f8f9fa', borderRadius: '8px', minHeight: '60px'}}>
+                  {transcript || "Listening..."}
+                </div>
               </div>
             )}
           </div>

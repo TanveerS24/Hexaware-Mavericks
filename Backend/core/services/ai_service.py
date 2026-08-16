@@ -111,6 +111,8 @@ class AIService:
         return {
             "category": category,
             "department": department,
+            "priority": "medium",
+            "sentiment": "neutral",
             "confidence": "low",
             "summary": summary
         }
