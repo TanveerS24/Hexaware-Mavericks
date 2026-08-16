@@ -20,6 +20,9 @@ const Register = () => {
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -30,6 +33,9 @@ const Register = () => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
       return setError("Passwords do not match");
+    }
+    if (!agreedToTerms) {
+      return setError("You must agree to the Terms of Service and Privacy Policy");
     }
     
     setLoading(true);
@@ -103,11 +109,43 @@ const Register = () => {
         <div className="grid grid-2">
           <div className="form-group">
             <label>Password</label>
-            <input type="password" name="password" className="form-control" onChange={handleChange} required minLength={6} />
+            <div className="input-icon-wrapper">
+              <input 
+                type={showPassword ? "text" : "password"} 
+                name="password" 
+                className="form-control" 
+                onChange={handleChange} 
+                required minLength={6} 
+              />
+              <button 
+                type="button" 
+                className="input-icon-toggle" 
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
           <div className="form-group">
             <label>Confirm Password</label>
-            <input type="password" name="confirmPassword" className="form-control" onChange={handleChange} required />
+            <div className="input-icon-wrapper">
+              <input 
+                type={showConfirmPassword ? "text" : "password"} 
+                name="confirmPassword" 
+                className="form-control" 
+                onChange={handleChange} 
+                required 
+              />
+              <button 
+                type="button" 
+                className="input-icon-toggle" 
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                title={showConfirmPassword ? "Hide password" : "Show password"}
+              >
+                {showConfirmPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -138,12 +176,26 @@ const Register = () => {
         </div>
         
         <div className="form-group mt-2 mb-4">
-          <button type="button" className="btn" onClick={getLocation} style={{border: '1px solid var(--border)'}}>
+          <button type="button" className="btn" onClick={getLocation} style={{border: '1px solid var(--border)', background: 'var(--surface)'}}>
             📍 Get GPS Coordinates
           </button>
           <span style={{marginLeft: '1rem'}} className="text-secondary">
             {formData.latitude && formData.longitude ? `Lat: ${formData.latitude}, Lng: ${formData.longitude}` : ''}
           </span>
+        </div>
+
+        <div className="form-group mb-4" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <input 
+            type="checkbox" 
+            id="terms" 
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            required
+            style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
+          />
+          <label htmlFor="terms" style={{ margin: 0, cursor: 'pointer' }}>
+            I agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and <Link to="/privacy" target="_blank">Privacy Policy</Link>
+          </label>
         </div>
 
         <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>

@@ -5,6 +5,7 @@ import api from '../api';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -54,13 +55,23 @@ const Login = () => {
         </div>
         <div className="form-group">
           <label>Password</label>
-          <input 
-            type="password" 
-            className="form-control" 
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required 
-          />
+          <div className="input-icon-wrapper">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              className="form-control" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required 
+            />
+            <button 
+              type="button" 
+              className="input-icon-toggle" 
+              onClick={() => setShowPassword(!showPassword)}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? "🙈" : "👁️"}
+            </button>
+          </div>
         </div>
         <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
           {loading ? 'Signing In...' : 'Sign In'}

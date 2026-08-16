@@ -231,9 +231,36 @@ const Dashboard = () => {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2>Welcome, {user?.name || 'Citizen'}</h2>
-        <p className="text-secondary">Report a problem in your area easily using voice or text.</p>
+      <div className="mb-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2>Welcome, {user?.name || 'Citizen'}</h2>
+          <p className="text-secondary">Report a problem in your area easily using voice or text.</p>
+        </div>
+        
+        {user && (
+          <div className="card" style={{ padding: '1rem 1.5rem', marginBottom: 0, minWidth: '250px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Credibility Score</span>
+              <span style={{ fontWeight: 700, color: user.credibility_score < 0.5 ? 'var(--error)' : 'var(--success)' }}>
+                {(user.credibility_score * 100).toFixed(0)} / 100
+              </span>
+            </div>
+            <div className="score-meter">
+              <div 
+                className="score-fill" 
+                style={{ 
+                  width: `${user.credibility_score * 100}%`,
+                  background: user.credibility_score < 0.5 ? 'var(--error)' : 'var(--success)'
+                }}
+              ></div>
+            </div>
+            <p className="text-secondary mt-2" style={{ fontSize: '0.75rem', margin: 0 }}>
+              {user.credibility_score < 0.5 
+                ? 'Warning: Submitting false reports has reduced your score.' 
+                : 'Maintain a high score for faster grievance resolution.'}
+            </p>
+          </div>
+        )}
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

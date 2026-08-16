@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -23,6 +23,27 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function App() {
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+      setIsDark(true);
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDark(prev => {
+      const newTheme = !prev;
+      document.documentElement.setAttribute('data-theme', newTheme ? 'dark' : 'light');
+      localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+      return newTheme;
+    });
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     window.location.href = '/login';
@@ -36,21 +57,24 @@ function App() {
             <Link to="/" style={{color: 'white', textDecoration: 'none'}}><h1>Citizen Portal</h1></Link>
           </div>
           <nav>
+            <button onClick={toggleTheme} style={{ marginRight: '1rem', background: 'transparent', border: '1px solid var(--border)', padding: '0.25rem 0.75rem' }} title="Toggle Theme">
+              {isDark ? '☀️ Light' : '🌙 Dark'}
+            </button>
             {localStorage.getItem('access_token') ? (
               <>
-                <Link to="/dashboard" style={{color: 'white', marginRight: '1rem'}}>Dashboard</Link>
-                <Link to="/report" style={{color: 'white', marginRight: '1rem'}}>Report</Link>
-                <Link to="/my-complaints" style={{color: 'white', marginRight: '1rem'}}>My Complaints</Link>
-                <Link to="/assistant" style={{color: 'white', marginRight: '1rem'}}>Chatbot</Link>
-                <Link to="/call-agent" style={{color: 'white', marginRight: '1rem'}}>Call Agent</Link>
-                <Link to="/emergency" style={{color: 'white', marginRight: '1rem'}}>Emergency</Link>
+                <Link to="/dashboard" style={{marginRight: '1rem'}}>Dashboard</Link>
+                <Link to="/report" style={{marginRight: '1rem'}}>Report</Link>
+                <Link to="/my-complaints" style={{marginRight: '1rem'}}>My Complaints</Link>
+                <Link to="/assistant" style={{marginRight: '1rem'}}>Chatbot</Link>
+                <Link to="/call-agent" style={{marginRight: '1rem'}}>Call Agent</Link>
+                <Link to="/emergency" style={{marginRight: '1rem'}}>Emergency</Link>
                 <button onClick={handleLogout}>Logout</button>
               </>
             ) : (
               <div>
-                <Link to="/emergency" style={{color: 'white', marginRight: '1rem'}}>Emergency</Link>
-                <Link to="/login" style={{color: 'white', marginRight: '1rem'}}>Login</Link>
-                <Link to="/register" style={{color: 'white'}}>Sign Up</Link>
+                <Link to="/emergency" style={{marginRight: '1rem'}}>Emergency</Link>
+                <Link to="/login" style={{marginRight: '1rem'}}>Login</Link>
+                <Link to="/register">Sign Up</Link>
               </div>
             )}
           </nav>
