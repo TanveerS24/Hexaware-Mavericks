@@ -1,11 +1,19 @@
 import asyncio
 import logging
+import os
+import sys
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select
+
+# Ensure core package can be imported
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.db.session import AsyncSessionLocal
+from core.db.session import engine, AsyncSessionLocal
+from core.db.base import Base
+import core.models
 from core.models.departments import Department
 from core.models.users import User, UserRole, UserStatus
 from core.models.sla_config import SLAConfig
@@ -13,18 +21,26 @@ from core.models.knowledge_base import KnowledgeBase
 from core.models.announcements import Announcement
 from core.models.issues import Issue, IssuePriority, IssueStatus
 from core.models.issue_status_history import IssueStatusHistory
-from core.models.issue_embeddings import IssueEmbedding
 from core.models.credibility_log import CredibilityLog
 from core.security import hash_password
-from core.services.rag_service import RAGService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("seed")
 
 
 async def seed_database():
-    logger.info("🌱 Starting database seeding...")
+    logger.info("Starting database initialization & seeding...")
 
+    # Step 1: Ensure tables exist in database
+    async with engine.begin() as conn:
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        except Exception as e:
+            logger.warning(f"Vector extension notice: {e}")
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database schema tables verified/created.")
+
+    # Step 2: Seed data
     async with AsyncSessionLocal() as session:
         # 1. Seed Departments
         dept_data = [
@@ -58,11 +74,11 @@ async def seed_database():
             ("Water & Sanitation", "medium", 24),
             ("Water & Sanitation", "low", 48),
             ("Electricity & Power", "high", 6),
-            ("Electricity & Power", "medium", 24),
-            ("Electricity & Power", "low", 48),
+            ("Electricity & Power", "medium", 18),
+            ("Electricity & Power", "low", 36),
             ("Roads & Infrastructure", "high", 24),
             ("Roads & Infrastructure", "medium", 48),
-            ("Roads & Infrastructure", "low", 96),
+            ("Roads & Infrastructure", "low", 72),
             ("Waste Management", "high", 12),
             ("Waste Management", "medium", 24),
             ("Waste Management", "low", 48),
@@ -71,26 +87,33 @@ async def seed_database():
             ("Public Health", "low", 48),
             ("Municipal Administration", "high", 24),
             ("Municipal Administration", "medium", 48),
-            ("Municipal Administration", "low", 72),
+            ("Municipal Administration", "low", 96),
         ]
 
-        for cat, pri, hrs in sla_defaults:
+        for cat, prio, hrs in sla_defaults:
             try:
                 existing_sla = await session.execute(
-                    select(SLAConfig).where(SLAConfig.category == cat, SLAConfig.priority == pri)
+                    select(SLAConfig).where(
+                        SLAConfig.category == cat,
+                        SLAConfig.priority == prio
+                    )
                 )
                 if not existing_sla.scalar_one_or_none():
-                    session.add(SLAConfig(category=cat, priority=pri, sla_hours=hrs))
+                    session.add(SLAConfig(
+                        category=cat,
+                        priority=prio,
+                        sla_hours=hrs
+                    ))
                     await session.commit()
             except IntegrityError:
                 await session.rollback()
 
-        # 3. Seed Users
+        # 3. Seed Demo Users
         users_to_seed = [
             {
-                "name": "Super Administrator",
+                "name": "Municipal Administrator",
                 "email": "admin@city.gov",
-                "phone": "+1000000000",
+                "phone": "+1000000001",
                 "password": "Admin@123",
                 "role": UserRole.ADMIN,
                 "department_id": None,
@@ -103,7 +126,7 @@ async def seed_database():
                 "phone": "+1000000002",
                 "password": "Officer@123",
                 "role": UserRole.OFFICER,
-                "department_id": dept_map.get("Water & Sanitation", None).id if dept_map.get("Water & Sanitation") else None,
+                "department_id": dept_map.get("Water & Sanitation").id if dept_map.get("Water & Sanitation") else None,
                 "credibility_score": 1.0,
                 "status": UserStatus.ACTIVE
             },
@@ -113,7 +136,7 @@ async def seed_database():
                 "phone": "+1000000003",
                 "password": "Officer@123",
                 "role": UserRole.OFFICER,
-                "department_id": dept_map.get("Electricity & Power", None).id if dept_map.get("Electricity & Power") else None,
+                "department_id": dept_map.get("Electricity & Power").id if dept_map.get("Electricity & Power") else None,
                 "credibility_score": 1.0,
                 "status": UserStatus.ACTIVE
             },
@@ -212,12 +235,11 @@ async def seed_database():
                 existing_kb = await session.execute(select(KnowledgeBase).where(KnowledgeBase.title == kb["title"]))
                 if not existing_kb.scalar_one_or_none():
                     dept = dept_map.get(kb["dept"])
-                    emb = await RAGService.get_embedding(f"{kb['title']}\n{kb['content']}")
                     session.add(KnowledgeBase(
                         department_id=dept.id if dept else None,
                         title=kb["title"],
                         content=kb["content"],
-                        embedding=emb
+                        embedding=None
                     ))
                     await session.commit()
             except IntegrityError:
@@ -269,8 +291,6 @@ async def seed_database():
                 session.add(demo_issue1)
                 await session.flush()
 
-                emb1 = await RAGService.get_embedding(demo_issue1.transcript)
-                session.add(IssueEmbedding(issue_id=demo_issue1.id, embedding=emb1))
                 session.add(IssueStatusHistory(
                     issue_id=demo_issue1.id,
                     old_status=None,
@@ -300,8 +320,6 @@ async def seed_database():
                 session.add(demo_issue2)
                 await session.flush()
 
-                emb2 = await RAGService.get_embedding(demo_issue2.transcript)
-                session.add(IssueEmbedding(issue_id=demo_issue2.id, embedding=emb2))
                 session.add(IssueStatusHistory(
                     issue_id=demo_issue2.id,
                     old_status="new",
@@ -313,7 +331,8 @@ async def seed_database():
         except IntegrityError:
             await session.rollback()
 
-        logger.info(" Database seeded successfully!")
+        logger.info("Database seeded successfully with initial data!")
+    await engine.dispose()
 
 
 if __name__ == "__main__":

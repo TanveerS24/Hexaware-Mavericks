@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from core.config import settings
 
-# Create async engine with robust pool settings
+# Create async engine with robust pool settings for Supabase / PgBouncer
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=(settings.LOG_LEVEL == "DEBUG"),
@@ -15,6 +15,7 @@ engine: AsyncEngine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     connect_args={
+        "statement_cache_size": 0,
         "prepared_statement_cache_size": 0
     }
 )
