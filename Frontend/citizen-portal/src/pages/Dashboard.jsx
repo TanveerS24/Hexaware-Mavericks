@@ -123,9 +123,43 @@ const Dashboard = () => {
   };
 
   const processAudio = async () => {
-    // This is kept for file upload fallback if needed, but since we have no STT backend,
-    // we just skip it or warn the user.
-    setError('Audio file upload requires a cloud STT API key. Please use the microphone button instead for instant browser transcription.');
+    if (!audioBlob) return;
+    setProcessing(true);
+    setError('');
+    
+    try {
+      const formData = new FormData();
+      // Ensure we pass the correct file name/extension for ogg if applicable
+      const ext = audioBlob.name ? audioBlob.name.split('.').pop() : 'mp3';
+      formData.append('audio_file', audioBlob, `complaint.${ext}`);
+      
+      const token = localStorage.getItem('access_token');
+      const response = await api.post('/issues/transcribe', formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const sttText = response.data.transcript;
+      
+      // Auto-translate if it's not in English
+      try {
+        const transRes = await api.post('/issues/translate', { text: sttText }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setEnglishTranslation(transRes.data.english_translation || sttText);
+      } catch (err) {
+        setEnglishTranslation(sttText);
+      }
+
+      setTranscript(sttText);
+      setStep(2);
+    } catch (err) {
+      setError('Failed to transcribe audio. Ensure your backend has a valid Gemini STT API key configured.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const submitComplaint = async () => {
@@ -228,9 +262,9 @@ const Dashboard = () => {
           </div>
 
           <div className="mb-4">
-            <input type="file" accept="audio/*" ref={fileInputRef} onChange={handleFileUpload} style={{display: 'none'}} />
+            <input type="file" accept="audio/*,.ogg" ref={fileInputRef} onChange={handleFileUpload} style={{display: 'none'}} />
             <button className="btn" onClick={() => fileInputRef.current.click()} style={{border: '1px solid var(--border)'}}>
-              📁 Upload Audio File
+              📁 Upload Audio File (.mp3, .ogg, .wav)
             </button>
           </div>
 
