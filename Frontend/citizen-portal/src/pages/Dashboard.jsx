@@ -136,7 +136,6 @@ const Dashboard = () => {
       const token = localStorage.getItem('access_token');
       const response = await api.post('/issues/transcribe', formData, {
         headers: { 
-          'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
         }
       });
@@ -190,7 +189,6 @@ const Dashboard = () => {
       const token = localStorage.getItem('access_token');
       const response = await api.post('/issues', formData, {
         headers: { 
-          'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${token}`
         }
       });
