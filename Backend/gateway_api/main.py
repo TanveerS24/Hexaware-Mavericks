@@ -140,10 +140,19 @@ app.include_router(admin_knowledge_base.router, prefix="/admin")
 @app.get("/", tags=["Central Gateway Health"])
 async def gateway_health():
     """
-    Central Gateway Health Status and Portal Routing Discovery.
+    Central Gateway Health Status, Database Connectivity, and Portal Discovery.
     """
+    db_status = "unknown"
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1;"))
+            db_status = "connected"
+    except Exception as e:
+        db_status = f"disconnected ({str(e).splitlines()[0] if str(e) else 'error'})"
+
     return {
-        "status": "healthy",
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "database": db_status,
         "service": "api-gateway",
         "version": "1.0.0",
         "portals": {
