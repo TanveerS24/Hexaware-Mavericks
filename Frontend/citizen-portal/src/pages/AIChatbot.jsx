@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import api from '../api';
 
+const QUICK_ACTIONS = [
+  "Track my complaint status",
+  "Report a water leak",
+  "Report a power outage",
+  "What is my credibility score?"
+];
+
 const AIChatbot = () => {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hello! I am your AI Copilot. I can answer questions about the status of your complaints or municipal services. How can I help you today?' }
+    { role: 'assistant', content: 'Hello! I am your AI Copilot. I can answer questions about the status of your complaints, help you file new ones, or explain municipal services. How can I help you today?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,19 +24,16 @@ const AIChatbot = () => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  const sendQuery = async (queryText) => {
+    if (!queryText.trim() || loading) return;
 
-    const userMessage = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, { role: 'user', content: queryText }]);
     setLoading(true);
 
     try {
       const token = localStorage.getItem('access_token');
       const response = await api.post('/chatbot', 
-        { message: userMessage },
+        { message: queryText },
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       
@@ -45,6 +49,13 @@ const AIChatbot = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    const query = input.trim();
+    setInput('');
+    sendQuery(query);
   };
 
   const handleFileComplaint = async (draft) => {
@@ -74,113 +85,116 @@ const AIChatbot = () => {
   };
 
   return (
-    <div className="chatbot-page" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
-      <h2 style={{ marginBottom: '1rem' }}>AI Copilot Chatbot</h2>
+    <div className="chatbot-container" style={{ height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+        <h2 style={{ marginBottom: '0.25rem', background: 'linear-gradient(135deg, var(--primary-blue), #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          AI Copilot
+        </h2>
+        <p className="text-secondary" style={{ margin: 0 }}>Intelligent Municipal Assistant</p>
+      </div>
       
       <div className="card" style={{ 
         flex: 1, 
         display: 'flex', 
         flexDirection: 'column', 
         padding: 0,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        background: 'var(--surface)'
       }}>
         <div style={{ 
           flex: 1, 
           overflowY: 'auto', 
-          padding: '1.5rem',
+          padding: '2rem',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem'
+          flexDirection: 'column'
         }}>
+          {messages.length === 1 && (
+            <div className="quick-actions">
+              {QUICK_ACTIONS.map((action, idx) => (
+                <button 
+                  key={idx} 
+                  className="action-chip"
+                  onClick={() => sendQuery(action)}
+                  disabled={loading}
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          )}
+
           {messages.map((msg, idx) => (
-            <div key={idx} style={{ 
-              alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '75%'
-            }}>
-              <div style={{
-                background: msg.role === 'user' ? 'var(--primary-blue)' : 'var(--background)',
-                color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
-                padding: '1rem',
-                borderRadius: 'var(--radius)',
-                borderBottomRightRadius: msg.role === 'user' ? 0 : 'var(--radius)',
-                borderBottomLeftRadius: msg.role === 'assistant' ? 0 : 'var(--radius)',
-                boxShadow: 'var(--shadow-sm)',
-                lineHeight: '1.5'
-              }}>
+            <div key={idx} className="chat-message" style={{ flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
+              <div className={`chat-avatar ${msg.role}`}>
+                {msg.role === 'user' ? '👤' : '🤖'}
+              </div>
+              <div className={`chat-bubble ${msg.role}`}>
                 {msg.content}
                 
                 {msg.can_auto_file && msg.extracted_issue_draft && (
-                  <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
-                    <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}><strong>Draft Category:</strong> {msg.extracted_issue_draft.category}</p>
-                    <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}><strong>Draft Summary:</strong> {msg.extracted_issue_draft.summary}</p>
+                  <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+                    <div style={{ background: 'var(--background)', padding: '1rem', borderRadius: 'var(--radius)', marginBottom: '1rem' }}>
+                      <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem', margin: 0 }}><strong>Category:</strong> {msg.extracted_issue_draft.category}</p>
+                      <p style={{ fontSize: '0.9rem', margin: 0, marginTop: '0.5rem' }}><strong>Summary:</strong> {msg.extracted_issue_draft.summary}</p>
+                    </div>
                     <button 
                       onClick={() => handleFileComplaint(msg.extracted_issue_draft)}
                       disabled={loading}
                       style={{
-                        background: 'var(--success)',
+                        background: 'linear-gradient(135deg, var(--success), #059669)',
                         color: 'white',
                         border: 'none',
-                        padding: '0.5rem 1rem',
+                        padding: '0.75rem 1rem',
                         borderRadius: 'var(--radius)',
                         cursor: loading ? 'not-allowed' : 'pointer',
                         fontWeight: 'bold',
-                        width: '100%'
+                        width: '100%',
+                        boxShadow: 'var(--shadow-sm)',
+                        transition: 'transform 0.2s'
                       }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                      onMouseOut={e => e.currentTarget.style.transform = 'none'}
                     >
-                      🚀 File this Complaint
+                      🚀 Submit Official Grievance
                     </button>
                   </div>
                 )}
               </div>
             </div>
           ))}
+
           {loading && (
-            <div style={{ alignSelf: 'flex-start' }}>
-              <div style={{
-                background: 'var(--background)',
-                color: 'var(--text-secondary)',
-                padding: '1rem',
-                borderRadius: 'var(--radius)',
-                borderBottomLeftRadius: 0,
-                boxShadow: 'var(--shadow-sm)'
-              }}>
-                <em>Typing...</em>
+             <div className="chat-message">
+              <div className="chat-avatar ai">🤖</div>
+              <div className="chat-bubble ai" style={{ padding: '1rem 1.5rem', width: 'auto' }}>
+                <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', height: '1.5rem' }}>
+                  <span style={{ animation: 'pulse 1.5s infinite', display: 'inline-block', width: '8px', height: '8px', background: 'var(--primary-blue)', borderRadius: '50%' }}></span>
+                  <span style={{ animation: 'pulse 1.5s infinite 0.2s', display: 'inline-block', width: '8px', height: '8px', background: 'var(--primary-blue)', borderRadius: '50%' }}></span>
+                  <span style={{ animation: 'pulse 1.5s infinite 0.4s', display: 'inline-block', width: '8px', height: '8px', background: 'var(--primary-blue)', borderRadius: '50%' }}></span>
+                </div>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
         
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-          <form onSubmit={handleSend} style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ padding: '1.25rem', borderTop: '1px solid var(--border)', background: 'var(--background)' }}>
+          <form onSubmit={handleSend} className="chat-input-wrapper">
             <input 
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me about your complaints..." 
-              style={{
-                flex: 1,
-                padding: '0.75rem 1rem',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                fontSize: '1rem'
-              }}
+              placeholder="Ask the AI Copilot..." 
+              className="form-control"
               disabled={loading}
+              style={{ width: '100%', margin: 0 }}
             />
             <button 
               type="submit" 
               disabled={loading || !input.trim()}
-              style={{
-                background: (loading || !input.trim()) ? 'var(--border)' : 'var(--primary-blue)',
-                color: (loading || !input.trim()) ? 'var(--text-secondary)' : 'white',
-                border: 'none',
-                padding: '0 1.5rem',
-                borderRadius: 'var(--radius)',
-                cursor: (loading || !input.trim()) ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold'
-              }}
+              className="send-button"
             >
-              Send
+              ➤
             </button>
           </form>
         </div>

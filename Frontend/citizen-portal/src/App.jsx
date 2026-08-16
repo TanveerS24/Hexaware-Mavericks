@@ -10,6 +10,7 @@ import ComplaintDetails from './pages/ComplaintDetails';
 import AIChatbot from './pages/AIChatbot';
 import CallAgent from './pages/CallAgent';
 import Emergency from './pages/Emergency';
+import Settings from './pages/Settings';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import './index.css';
@@ -68,6 +69,7 @@ function App() {
                 <Link to="/assistant" style={{marginRight: '1rem'}}>Chatbot</Link>
                 <Link to="/call-agent" style={{marginRight: '1rem'}}>Call Agent</Link>
                 <Link to="/emergency" style={{marginRight: '1rem'}}>Emergency</Link>
+                <Link to="/settings" style={{marginRight: '1rem'}}>Settings ⚙️</Link>
                 <button onClick={handleLogout}>Logout</button>
               </>
             ) : (
@@ -95,6 +97,7 @@ function App() {
             <Route path="/my-complaints/:id" element={<ProtectedRoute><ComplaintDetails /></ProtectedRoute>} />
             <Route path="/assistant" element={<ProtectedRoute><AIChatbot /></ProtectedRoute>} />
             <Route path="/call-agent" element={<ProtectedRoute><CallAgent /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
