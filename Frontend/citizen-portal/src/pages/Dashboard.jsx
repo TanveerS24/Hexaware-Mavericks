@@ -363,28 +363,34 @@ const Dashboard = () => {
           )}
 
           <div className="mt-4 p-3 mb-4" style={{ background: 'var(--background)', borderRadius: 'var(--radius)' }}>
-            <h5>AI Analysis (You can edit these before submitting)</h5>
+            <h5>AI Analysis (Read-Only)</h5>
+            <p className="text-secondary mb-3">
+              The AI has analyzed your complaint and assigned the following details. This ensures accurate routing to the correct department.
+            </p>
             <div className="form-group mb-3">
-              <label>AI Summary of your issue</label>
-              <textarea className="form-control" rows="3" value={aiSummary} onChange={e => setAiSummary(e.target.value)} />
+              <label>AI Summary</label>
+              <div className="p-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                {aiSummary || 'No summary generated.'}
+              </div>
             </div>
             <div className="grid grid-2">
               <div className="form-group">
                 <label>Category</label>
-                <select className="form-control" value={category} onChange={e => setCategory(e.target.value)}>
-                  <option value="water and sewage">Water and Sewage</option>
-                  <option value="electricity">Electricity</option>
-                  <option value="Road and transport">Road and Transport</option>
-                  <option value="General">General Municipal Administration</option>
-                </select>
+                <div className="p-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontWeight: 'bold' }}>
+                  {category || 'General'}
+                </div>
               </div>
               <div className="form-group">
                 <label>Priority</label>
-                <select className="form-control" value={priority} onChange={e => setPriority(e.target.value)}>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
+                <div className="p-2" style={{ 
+                  background: 'var(--surface)', 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius)', 
+                  fontWeight: 'bold',
+                  color: priority === 'high' ? 'var(--danger)' : priority === 'medium' ? 'var(--warning)' : 'var(--success)'
+                }}>
+                  {priority ? priority.toUpperCase() : 'MEDIUM'}
+                </div>
               </div>
             </div>
           </div>
