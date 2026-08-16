@@ -1,10 +1,36 @@
+from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
+from sqlalchemy import text
 
 from core.config import settings
 from core.exceptions import register_exception_handlers
 from core.middleware import AuthenticationMiddleware
+from core.db.session import engine
+from core.db.base import Base
+import core.models
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+    Safely creates database tables and enables pgvector extension on startup.
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.warning(f"Database schema auto-creation skipped: {e}")
+    yield
+    await engine.dispose()
+
 
 # Import portal routers for seamless single-gateway or reverse-proxy architecture
 from citizen_api.routers import (
@@ -42,7 +68,8 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # 1. Global Standardized Exception Handling
