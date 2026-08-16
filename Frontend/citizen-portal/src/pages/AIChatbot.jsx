@@ -33,10 +33,41 @@ const AIChatbot = () => {
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       
-      setMessages(prev => [...prev, { role: 'assistant', content: response.data.reply }]);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: response.data.reply,
+        can_auto_file: response.data.can_auto_file,
+        extracted_issue_draft: response.data.extracted_issue_draft
+      }]);
     } catch (err) {
       console.error("Chatbot error:", err);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I am having trouble connecting right now. Please try again later.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileComplaint = async (draft) => {
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('transcript', draft.transcript || "Complaint filed via chatbot");
+      if (draft.category) formData.append('category', draft.category);
+      if (draft.priority) formData.append('priority', draft.priority);
+      if (draft.summary) formData.append('ai_summary', draft.summary);
+      
+      const token = localStorage.getItem('access_token');
+      const response = await api.post('/issues', formData, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `✅ Successfully filed! Your Complaint ID is **${response.data.issue_id}**. You can track its status in the 'My Complaints' section.`
+      }]);
+    } catch (err) {
+      console.error("Failed to auto-file:", err);
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Sorry, I failed to file the complaint. Please use the Report page.' }]);
     } finally {
       setLoading(false);
     }
@@ -77,6 +108,29 @@ const AIChatbot = () => {
                 lineHeight: '1.5'
               }}>
                 {msg.content}
+                
+                {msg.can_auto_file && msg.extracted_issue_draft && (
+                  <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}><strong>Draft Category:</strong> {msg.extracted_issue_draft.category}</p>
+                    <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}><strong>Draft Summary:</strong> {msg.extracted_issue_draft.summary}</p>
+                    <button 
+                      onClick={() => handleFileComplaint(msg.extracted_issue_draft)}
+                      disabled={loading}
+                      style={{
+                        background: 'var(--success)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: 'var(--radius)',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        width: '100%'
+                      }}
+                    >
+                      🚀 File this Complaint
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

@@ -129,17 +129,24 @@ class IssueService:
             if stt_text:
                 transcript = stt_text
 
-        # AI Classification
-        ai_res = await AIService.classify_grievance(transcript)
-        category = data.category or ai_res["category"]
-        priority_str = ai_res["priority"]
-        priority = IssuePriority(priority_str) if priority_str in [e.value for e in IssuePriority] else IssuePriority.MEDIUM
-        summary = ai_res["summary"]
-        sentiment = ai_res["sentiment"]
-        
-        # Override transcript with translated English version if available
-        if "english_translation" in ai_res and ai_res["english_translation"]:
-            transcript = ai_res["english_translation"]
+        # AI Classification (Skip if already parsed in draft)
+        if data.ai_summary and data.priority and data.category:
+            category = data.category
+            priority_str = data.priority
+            priority = IssuePriority(priority_str) if priority_str in [e.value for e in IssuePriority] else IssuePriority.MEDIUM
+            summary = data.ai_summary
+            sentiment = "neutral"
+        else:
+            ai_res = await AIService.classify_grievance(transcript)
+            category = data.category or ai_res["category"]
+            priority_str = ai_res["priority"]
+            priority = IssuePriority(priority_str) if priority_str in [e.value for e in IssuePriority] else IssuePriority.MEDIUM
+            summary = ai_res["summary"]
+            sentiment = ai_res["sentiment"]
+            
+            # Override transcript with translated English version if available
+            if "english_translation" in ai_res and ai_res["english_translation"]:
+                transcript = ai_res["english_translation"]
 
         # Geocoding ward
         ward = data.ward or stub_reverse_geocode(data.location_lat, data.location_lng)

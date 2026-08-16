@@ -55,12 +55,13 @@ async def query_chatbot(
         context_data = "You currently have no active or past complaints."
 
     # 3. Query Gemini
-    reply = await AIService.query_citizen_chatbot(context_data, data.message)
+    ai_result = await AIService.query_citizen_chatbot(context_data, data.message)
 
     return ChatbotResponse(
-        reply=reply,
+        reply=ai_result.get("reply", "I am unable to process your request."),
         suggested_category=None,
         suggested_department_id=None,
         relevant_articles=[],
-        can_auto_file=False
+        can_auto_file=ai_result.get("can_auto_file", False),
+        extracted_issue_draft=ai_result.get("extracted_issue_draft", None)
     )

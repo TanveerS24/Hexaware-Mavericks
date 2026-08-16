@@ -11,8 +11,18 @@ class IssueCreateRequest(BaseModel):
     ward: Optional[str] = None
     audio_url: Optional[str] = None
     category: Optional[str] = None  # Optional override if client provides
+    ai_summary: Optional[str] = None
+    priority: Optional[str] = None
     source: str = Field("manual", description="Source of the complaint")
 
+
+class IssueDraftResponse(BaseModel):
+    original_transcript: str
+    english_translation: str
+    category: str
+    priority: str
+    summary: str
+    sentiment: str
 
 class IssueForwardRequest(BaseModel):
     department_id: int = Field(..., description="Target department ID")

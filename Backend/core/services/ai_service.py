@@ -336,22 +336,34 @@ Response:"""
         return text
 
     @classmethod
-    async def query_citizen_chatbot(cls, context_data: str, user_query: str) -> str:
+    async def query_citizen_chatbot(cls, context_data: str, user_query: str) -> dict:
         """
-        Query AI based on citizen's complaint history context.
+        Query AI based on citizen's complaint history context. Returns JSON dict.
         """
         prompt = f"""You are a helpful AI assistant for the Citizen Grievance Portal.
-Use ONLY the following context about the citizen's active complaints to answer their question.
+Use the following context about the citizen's active complaints to answer their question.
 If the answer is not contained in the context, politely inform them that you do not have that information.
 Do NOT invent or hallucinate information.
+
+If the citizen is attempting to REPORT A NEW COMPLAINT in their message, you must extract the details.
+
+You must output STRICTLY a valid JSON object matching this schema:
+{{
+  "reply": "Your conversational response to the citizen",
+  "can_auto_file": boolean (true if they are reporting a new complaint, false otherwise),
+  "extracted_issue_draft": {{
+    "transcript": "The full text of their new complaint",
+    "summary": "A 1 sentence summary of the complaint",
+    "category": "water and sewage | electricity | Road and transport | General",
+    "priority": "high | medium | low"
+  }} // or null if can_auto_file is false
+}}
 
 Context (Citizen's Complaints):
 {context_data}
 
 Citizen's Question:
-{user_query}
-
-Answer:"""
+{user_query}"""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 provider = getattr(settings, "AI_PROVIDER", "gemini")
@@ -374,21 +386,27 @@ Answer:"""
                     payload = {
                         "model": ai_model,
                         "messages": [
-                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "system", "content": "You output strictly valid JSON."},
                             {"role": "user", "content": prompt}
                         ],
-                        "temperature": 0.2
+                        "temperature": 0.2,
+                        "response_format": {"type": "json_object"}
                     }
                     resp = await client.post(url, headers=headers, json=payload)
                     if resp.status_code == 200:
-                        return resp.json()["choices"][0]["message"]["content"].strip()
+                        raw_json = resp.json()["choices"][0]["message"]["content"].strip()
+                        return json.loads(raw_json)
                 
                 # If Gemini
                 elif provider == "gemini":
                     result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
-                    if result: return result
+                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
                     
         except Exception as e:
             logger.warning(f"Chatbot API request failed ({str(e)}).")
 
-        return "I apologize, but I am currently unable to process your request. Please try again later."
+        return {
+            "reply": "I apologize, but I am currently unable to process your request. Please try again later.",
+            "can_auto_file": False,
+            "extracted_issue_draft": None
+        }

@@ -18,6 +18,9 @@ const Dashboard = () => {
   // Complaint State
   const [transcript, setTranscript] = useState('');
   const [englishTranslation, setEnglishTranslation] = useState('');
+  const [aiSummary, setAiSummary] = useState('');
+  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState('');
   const [location, setLocation] = useState({ area: '', city: '', state: '', postal_code: '', latitude: '', longitude: '' });
   const [useRegisteredLocation, setUseRegisteredLocation] = useState(false);
   
@@ -96,13 +99,20 @@ const Dashboard = () => {
       if (transcript.trim().length > 0) {
         setProcessing(true);
         try {
+          const formData = new FormData();
+          formData.append('transcript', transcript);
+          
           const token = localStorage.getItem('access_token');
-          const res = await api.post('/issues/translate', { text: transcript }, {
+          const res = await api.post('/issues/draft', formData, {
             headers: { Authorization: `Bearer ${token}` }
           });
+          
           setEnglishTranslation(res.data.english_translation || transcript);
+          setAiSummary(res.data.summary || '');
+          setCategory(res.data.category || '');
+          setPriority(res.data.priority || 'medium');
         } catch (err) {
-          console.error("Translation failed", err);
+          console.error("Draft parsing failed", err);
           setEnglishTranslation(transcript);
         } finally {
           setProcessing(false);
@@ -142,12 +152,19 @@ const Dashboard = () => {
       
       const sttText = response.data.transcript;
       
-      // Auto-translate if it's not in English
+      // Process through AI Draft endpoint
       try {
-        const transRes = await api.post('/issues/translate', { text: sttText }, {
+        const draftFormData = new FormData();
+        draftFormData.append('transcript', sttText);
+        
+        const transRes = await api.post('/issues/draft', draftFormData, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        
         setEnglishTranslation(transRes.data.english_translation || sttText);
+        setAiSummary(transRes.data.summary || '');
+        setCategory(transRes.data.category || '');
+        setPriority(transRes.data.priority || 'medium');
       } catch (err) {
         setEnglishTranslation(sttText);
       }
@@ -168,6 +185,8 @@ const Dashboard = () => {
     try {
       const formData = new FormData();
       formData.append('transcript', englishTranslation || transcript);
+      if (aiSummary) formData.append('ai_summary', aiSummary);
+      if (category) formData.append('category', category);
       
       const locData = useRegisteredLocation && user ? {
         ward: user.area,
@@ -344,8 +363,30 @@ const Dashboard = () => {
           )}
 
           <div className="mt-4 p-3 mb-4" style={{ background: 'var(--background)', borderRadius: 'var(--radius)' }}>
-            <h5>Review Complaint</h5>
-            <p><strong>Complaint (English):</strong> {englishTranslation || transcript}</p>
+            <h5>AI Analysis (You can edit these before submitting)</h5>
+            <div className="form-group mb-3">
+              <label>AI Summary of your issue</label>
+              <textarea className="form-control" rows="3" value={aiSummary} onChange={e => setAiSummary(e.target.value)} />
+            </div>
+            <div className="grid grid-2">
+              <div className="form-group">
+                <label>Category</label>
+                <select className="form-control" value={category} onChange={e => setCategory(e.target.value)}>
+                  <option value="water and sewage">Water and Sewage</option>
+                  <option value="electricity">Electricity</option>
+                  <option value="Road and transport">Road and Transport</option>
+                  <option value="General">General Municipal Administration</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Priority</label>
+                <select className="form-control" value={priority} onChange={e => setPriority(e.target.value)}>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-2 mt-4">

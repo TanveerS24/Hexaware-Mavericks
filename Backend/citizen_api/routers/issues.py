@@ -20,6 +20,7 @@ from core.schemas.issue import (
     IssueCreateRequest,
     IssueResponse,
     IssueListResponse,
+    IssueDraftResponse,
     DuplicateCheckResult
 )
 from core.security import get_current_user
@@ -66,6 +67,37 @@ async def translate_text(
     return {"english_translation": translation}
 
 
+@router.post("/draft", response_model=IssueDraftResponse)
+async def draft_issue(
+    transcript: Optional[str] = Form(None),
+    audio_file: Optional[UploadFile] = File(None),
+    current_user: User = Depends(require_not_blocked)
+):
+    """
+    Parse a grievance text/audio into a draft before saving.
+    """
+    audio_bytes = None
+    if audio_file:
+        audio_bytes = await audio_file.read()
+
+    text_to_process = transcript or ""
+    if audio_bytes:
+        stt_text = await AIService.transcribe_audio(audio_bytes)
+        if stt_text:
+            text_to_process = stt_text
+
+    ai_res = await AIService.classify_grievance(text_to_process)
+    
+    return IssueDraftResponse(
+        original_transcript=text_to_process,
+        english_translation=ai_res.get("english_translation", text_to_process),
+        category=ai_res.get("category", "General"),
+        priority=ai_res.get("priority", "medium"),
+        summary=ai_res.get("summary", ""),
+        sentiment=ai_res.get("sentiment", "neutral")
+    )
+
+
 @router.post("", response_model=IssueResponse, status_code=status.HTTP_201_CREATED)
 async def create_issue(
     data: Optional[IssueCreateRequest] = None,
@@ -74,6 +106,8 @@ async def create_issue(
     location_lng: Optional[float] = Form(None),
     ward: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
+    ai_summary: Optional[str] = Form(None),
+    priority: Optional[str] = Form(None),
     source: Optional[str] = Form("manual"),
     audio_file: Optional[UploadFile] = File(None),
     current_user: User = Depends(require_not_blocked),
@@ -98,6 +132,8 @@ async def create_issue(
             location_lng=location_lng,
             ward=ward,
             category=category,
+            ai_summary=ai_summary,
+            priority=priority,
             source=source
         )
 
