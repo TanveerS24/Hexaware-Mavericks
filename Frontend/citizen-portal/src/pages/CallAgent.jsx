@@ -159,45 +159,61 @@ const CallAgent = () => {
   if (loading) return <div>Loading Call Agent...</div>;
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>AI Voice Call Agent</h2>
+    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <h2 style={{ background: 'linear-gradient(135deg, var(--primary-blue), #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem' }}>
+          AI Voice Call Agent
+        </h2>
+        <p className="text-secondary">Simulate a voice call with our AI assistant</p>
+      </div>
       
-      <div style={{ marginBottom: '2rem', padding: '1rem', background: '#e6f0fa', borderRadius: '8px' }}>
-        <strong>Agent Says:</strong>
-        <p>{agentSpeech || 'Click Start Call to begin'}</p>
-      </div>
-
-      <div style={{ marginBottom: '2rem', padding: '1rem', background: '#f4f7f6', borderRadius: '8px' }}>
-        <strong>You Said:</strong>
-        <p>{transcript}</p>
-      </div>
-
-      {agentState === 'IDLE' && (
-        <button onClick={startAgent} style={{ padding: '10px 20px', background: 'var(--primary-blue)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          Start Call
-        </button>
-      )}
-
-      {agentState === 'AWAITING_SELECTION' && (
-        <div style={{ marginTop: '2rem' }}>
-          <h3>Select a complaint (Touch or Voice):</h3>
-          {complaints.map((c, idx) => (
-            <button 
-              key={c.id} 
-              onClick={() => handleSelectComplaint(idx)}
-              style={{ display: 'block', margin: '10px 0', padding: '10px', width: '100%' }}
-            >
-              [ {idx + 1} ] {c.category}
-            </button>
-          ))}
-          <button 
-            onClick={handleNewProblemInitiated}
-            style={{ display: 'block', margin: '10px 0', padding: '10px', width: '100%', background: '#28a745', color: 'white' }}
-          >
-            I want to report a new problem
-          </button>
+      <div className="card">
+        <div style={{ marginBottom: '1.5rem', padding: '1.25rem', background: 'var(--primary-light)', borderRadius: 'var(--radius)', border: '1px solid rgba(37, 99, 235, 0.1)' }}>
+          <strong style={{ color: 'var(--primary-dark)', display: 'block', marginBottom: '0.5rem' }}>🤖 Agent Says:</strong>
+          <p style={{ margin: 0, fontSize: '1.1rem', lineHeight: '1.5' }}>{agentSpeech || 'Click Start Call to begin'}</p>
         </div>
-      )}
+
+        <div style={{ marginBottom: '2rem', padding: '1.25rem', background: 'var(--background)', borderRadius: 'var(--radius)', border: 'var(--glass-border)' }}>
+          <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: '0.5rem' }}>👤 You Said:</strong>
+          <p style={{ margin: 0, fontSize: '1.1rem', fontStyle: transcript ? 'normal' : 'italic', color: transcript ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+            {transcript || 'Waiting for you to speak...'}
+          </p>
+        </div>
+
+        {agentState === 'IDLE' && (
+          <div className="text-center">
+            <button onClick={startAgent} className="btn btn-primary" style={{ padding: '0.75rem 2rem', fontSize: '1.1rem', borderRadius: '999px' }}>
+              📞 Start Call
+            </button>
+          </div>
+        )}
+
+        {agentState === 'AWAITING_SELECTION' && (
+          <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border)', paddingTop: '1.5rem' }}>
+            <h4 style={{ marginBottom: '1rem' }}>Select a complaint (Touch or Voice):</h4>
+            <div className="grid grid-2">
+              {complaints.map((c, idx) => (
+                <button 
+                  key={c.id} 
+                  onClick={() => handleSelectComplaint(idx)}
+                  className="btn"
+                  style={{ background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '1rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
+                >
+                  <span style={{ background: 'var(--primary-blue)', color: 'white', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', flexShrink: 0 }}>{idx + 1}</span>
+                  {c.category}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={handleNewProblemInitiated}
+              className="btn btn-primary mt-3"
+              style={{ width: '100%', background: 'linear-gradient(135deg, var(--success), #059669)', border: 'none' }}
+            >
+              + I want to report a new problem
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
