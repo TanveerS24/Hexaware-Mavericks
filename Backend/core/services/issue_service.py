@@ -16,7 +16,6 @@ from core.exceptions import (
 from core.models.users import User, UserRole, UserStatus
 from core.models.issues import Issue, IssuePriority, IssueStatus
 from core.models.issue_status_history import IssueStatusHistory
-from core.models.issue_embeddings import IssueEmbedding
 from core.models.departments import Department
 from core.models.sla_config import SLAConfig
 from core.schemas.issue import (
@@ -177,15 +176,6 @@ class IssueService:
         )
         db.add(issue)
         await db.flush()
-
-        # Save embedding
-        embedding_vec = dup_info.get("embedding")
-        if embedding_vec:
-            emb_entry = IssueEmbedding(
-                issue_id=issue.id,
-                embedding=embedding_vec
-            )
-            db.add(emb_entry)
 
         # Record history
         history = IssueStatusHistory(

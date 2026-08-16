@@ -13,9 +13,8 @@ from core.schemas.knowledge_base import (
     KnowledgeBaseListResponse
 )
 from core.security import require_roles
-from core.services.rag_service import RAGService
 
-router = APIRouter(prefix="/knowledge-base", tags=["Knowledge Base & RAG Training"])
+router = APIRouter(prefix="/knowledge-base", tags=["Knowledge Base & FAQ Management"])
 
 
 @router.post("", response_model=KnowledgeBaseResponse, status_code=status.HTTP_201_CREATED)
@@ -26,15 +25,13 @@ async def create_knowledge_base_article(
 ):
     """
     Add a new knowledge base article or FAQ guide.
-    Generates pgvector embedding for RAG chatbot lookup.
+    Articles are stored and searchable by keyword matching via the chatbot.
     """
-    embedding_vec = await RAGService.get_embedding(f"{data.title}\n{data.content}")
-
     article = KnowledgeBase(
         department_id=data.department_id,
         title=data.title.strip(),
         content=data.content.strip(),
-        embedding=embedding_vec
+        embedding=None  # No vector embedding — chatbot uses keyword search
     )
     db.add(article)
     await db.commit()

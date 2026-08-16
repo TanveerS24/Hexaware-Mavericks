@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     LOW_CREDIBILITY_THRESHOLD: float = 0.5
     RECOVERY_TARGET_SCORE: float = 0.7
     RECOVERY_PERIOD_MULTIPLIER: float = 2.0  # 2 * block_duration_days
-    DUPLICATE_SIMILARITY_THRESHOLD: float = 0.82
+    DUPLICATE_SIMILARITY_THRESHOLD: float = 0.5  # Jaccard overlap threshold for keyword-based duplicate detection
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
