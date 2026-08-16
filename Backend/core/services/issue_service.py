@@ -151,12 +151,17 @@ class IssueService:
         # Geocoding ward
         ward = data.ward or stub_reverse_geocode(data.location_lat, data.location_lng)
 
-        # Duplicate check
+        # Duplicate check (Semantic Analysis)
         dup_info = await RAGService.check_duplicate_issue(
             db=db,
             transcript=transcript,
             ward=ward
         )
+        
+        # Priority Escalation based on Semantic Analysis
+        if dup_info.is_duplicate:
+            priority = IssuePriority.HIGH
+            summary = f"{summary} [Elevated Priority: High volume of similar issues detected in this ward]"
 
         # Calculate SLA
         sla_due_at = await cls.calculate_sla_due_date(db, category, priority)

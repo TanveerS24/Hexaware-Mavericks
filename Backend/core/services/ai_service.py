@@ -137,7 +137,7 @@ class AIService:
         prompt = f"""You are an AI assistant for a municipal citizen grievance redressal platform.
 Analyze the following citizen complaint and return ONLY a valid JSON object matching this schema:
 {{
-  "category": "Road and transport | water and sewage | electricity",
+  "category": "water and sewage | electricity | Road and transport | General",
   "priority": "high | medium | low",
   "summary": "1-2 sentence concise neutral summary of the core issue",
   "sentiment": "urgent | frustrated | neutral | positive",
