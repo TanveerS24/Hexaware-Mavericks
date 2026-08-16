@@ -67,6 +67,17 @@ class Settings(BaseSettings):
     RECOVERY_PERIOD_MULTIPLIER: float = 2.0  # 2 * block_duration_days
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.82
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_database_url(cls, v: str) -> str:
+        if not v:
+            return v
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
