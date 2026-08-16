@@ -1,8 +1,11 @@
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
+# pyrefly: ignore [missing-import]
 from sqlalchemy import select, func, update, and_, or_
+# pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import selectinload
 
 from core.config import settings
@@ -29,6 +32,8 @@ from core.schemas.issue import (
 from core.services.ai_service import AIService
 from core.services.rag_service import RAGService
 from core.services.credibility_service import CredibilityService
+from core.services.websocket_manager import ws_manager
+
 
 
 def stub_reverse_geocode(lat: Optional[float], lng: Optional[float]) -> Optional[str]:
@@ -369,6 +374,7 @@ class IssueService:
         issue.status = IssueStatus.IN_PROGRESS
         issue.version += 1
 
+        assigned_at_str = datetime.now(timezone.utc).isoformat()
         history = IssueStatusHistory(
             issue_id=issue.id,
             old_status=old_status,
@@ -379,6 +385,25 @@ class IssueService:
         db.add(history)
         await db.commit()
         await db.refresh(issue)
+
+        # Broadcast live status change to connected admin map dashboards
+        try:
+            await ws_manager.broadcast_status_change(
+                issue_id=issue.issue_id,
+                status=IssueStatus.IN_PROGRESS.value,
+                officer_name=officer.name,
+                officer_id=officer.id,
+                assigned_at=assigned_at_str,
+                lat=issue.location_lat,
+                lng=issue.location_lng,
+                category=issue.category,
+                ward=issue.ward,
+                priority=issue.priority.value if hasattr(issue.priority, "value") else str(issue.priority),
+                summary=issue.ai_summary or (issue.transcript[:80] if issue.transcript else "")
+            )
+        except Exception:
+            pass
+
         return issue
 
     @classmethod
@@ -415,6 +440,26 @@ class IssueService:
         db.add(history)
         await db.commit()
         await db.refresh(issue)
+
+        # Broadcast live status change to connected admin map dashboards
+        try:
+            assigned_at_str = datetime.now(timezone.utc).isoformat()
+            await ws_manager.broadcast_status_change(
+                issue_id=issue.issue_id,
+                status=data.status.value,
+                officer_name=officer.name,
+                officer_id=officer.id,
+                assigned_at=assigned_at_str,
+                lat=issue.location_lat,
+                lng=issue.location_lng,
+                category=issue.category,
+                ward=issue.ward,
+                priority=issue.priority.value if hasattr(issue.priority, "value") else str(issue.priority),
+                summary=issue.ai_summary or (issue.transcript[:80] if issue.transcript else "")
+            )
+        except Exception:
+            pass
+
         return issue
 
     @classmethod
@@ -459,6 +504,7 @@ class IssueService:
 
         # Priority ordering: high -> medium -> low
         # Using case expression for deterministic sort
+        # pyrefly: ignore [missing-import]
         from sqlalchemy import case
         priority_order = case(
             (Issue.priority == IssuePriority.HIGH, 1),

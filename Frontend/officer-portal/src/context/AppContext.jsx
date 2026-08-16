@@ -4,7 +4,7 @@ import api from '../services/api';
 
 const AppContext = createContext(null);
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
 export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -30,6 +30,30 @@ export const AppProvider = ({ children }) => {
       setLoading(false);
     }
   }, [token]);
+
+  // Listen for real-time approval/rejection from Admin Portal via BroadcastChannel
+  useEffect(() => {
+    let channel = null;
+    try {
+      channel = new BroadcastChannel('OFFICER_APPROVAL_CHANNEL');
+      channel.onmessage = (event) => {
+        const msg = event.data;
+        if (msg?.type === 'OFFICER_APPROVED' && msg.officer) {
+          // Trigger a re-auth if the current user was just approved
+          window.dispatchEvent(new CustomEvent('account_approved', { detail: msg }));
+        }
+        if (msg?.type === 'OFFICER_REJECTED' && msg.officerId) {
+          window.dispatchEvent(new CustomEvent('account_rejected', { detail: msg }));
+        }
+      };
+    } catch (e) {
+      console.warn('BroadcastChannel not supported', e);
+    }
+    return () => {
+      if (channel) channel.close();
+    };
+  }, []);
+
 
   // Setup Socket.IO when user is available
   useEffect(() => {

@@ -14,6 +14,16 @@ class CreateStaffUserRequest(BaseModel):
     department_id: Optional[int] = Field(None, description="Department ID for field officer")
 
 
+class OfficerApproveRequest(BaseModel):
+    department_id: Optional[int] = Field(None, description="Assign or update department upon approval")
+    notes: Optional[str] = Field(None, description="Approval notes")
+
+
+class OfficerRejectRequest(BaseModel):
+    reason: Optional[str] = Field(None, description="Reason for rejection to display to the applicant")
+
+
 class UserListResponse(BaseModel):
     total: int
     items: List[UserResponse]
+

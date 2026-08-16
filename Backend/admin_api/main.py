@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
@@ -88,5 +90,6 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
     uvicorn.run("admin_api.main:app", host="0.0.0.0", port=settings.ADMIN_API_PORT, reload=True)

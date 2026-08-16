@@ -1,8 +1,12 @@
 from contextlib import asynccontextmanager
 import logging
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 import httpx
+# pyrefly: ignore [missing-import]
 from sqlalchemy import text
 
 from core.config import settings
@@ -75,6 +79,9 @@ app = FastAPI(
 # 1. Global Standardized Exception Handling
 register_exception_handlers(app)
 
+from core.services.websocket_manager import ws_manager
+from fastapi import WebSocket, WebSocketDisconnect
+
 # 2. Centralized Authentication Gateway Middleware
 app.add_middleware(
     AuthenticationMiddleware,
@@ -93,14 +100,31 @@ app.add_middleware(
         r"^/citizen/announcements/?.*",
         r"^/citizen/chatbot/?.*",
         r"^/officer/auth/.*",
-        r"^/admin/auth/.*"
+        r"^/auth/.*",
+        r"^/admin/auth/.*",
+        r"^/ws/.*"
     ]
 )
 
 # 3. Global CORS Middleware
+# NOTE: allow_credentials=True is incompatible with allow_origins=["*"].
+# Explicitly list all dev + production origins.
+CORS_ALLOW_ORIGINS = settings.CORS_ORIGINS if settings.CORS_ORIGINS != ["*"] else [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:5176",
+    "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=CORS_ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +133,9 @@ app.add_middleware(
 # ------------------------------------------------------------------------------
 # 4. Centralized Mounts for Portals under API Gateway
 # ------------------------------------------------------------------------------
+
+# Direct Auth aliases
+app.include_router(officer_auth.router, prefix="")
 
 # --- Citizen Portal Routes (/citizen) ---
 app.include_router(citizen_auth.router, prefix="/citizen")
@@ -165,6 +192,34 @@ async def gateway_health():
     }
 
 
+@app.websocket("/ws/admin")
+@app.websocket("/ws/events")
+async def websocket_admin_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time live map updates, grievance status changes,
+    and officer assignment notifications for admin dashboards.
+    """
+    await ws_manager.connect_admin(websocket)
+    try:
+        while True:
+            # Keep socket alive and accept ping/heartbeat or broadcast payloads
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text('{"type": "pong"}')
+            else:
+                try:
+                    import json
+                    payload = json.loads(data)
+                    await ws_manager.broadcast_json(payload)
+                except Exception:
+                    pass
+    except WebSocketDisconnect:
+        ws_manager.disconnect_admin(websocket)
+    except Exception:
+        ws_manager.disconnect_admin(websocket)
+
+
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
     uvicorn.run("gateway_api.main:app", host="0.0.0.0", port=8000, reload=True)

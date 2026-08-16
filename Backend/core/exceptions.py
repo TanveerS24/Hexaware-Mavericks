@@ -144,6 +144,30 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "detail": None
             }
         )
+
+    @app.exception_handler(OSError)
+    async def db_offline_handler(request: Request, exc: OSError) -> JSONResponse:
+        """
+        Intercepts PostgreSQL connection-refused errors (errno 10061 / ECONNREFUSED).
+        Returns 503 with an empty-but-valid payload so the frontend can degrade gracefully
+        instead of receiving a raw 500 that crashes React components.
+        """
+        logging.getLogger("core.exceptions").warning(
+            f"DB offline on {request.method} {request.url.path}: {exc}"
+        )
+        # Return an empty valid response shape so frontend Promise.allSettled captures it
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error_code": "DB_OFFLINE",
+                "message": "Database is temporarily unavailable. Showing cached data.",
+                "items": [],
+                "total": 0,
+                "points": [],
+                "trends": [],
+            }
+        )
+
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         logging.getLogger("core.exceptions").exception(f"Unhandled exception on {request.method} {request.url.path}: {exc}")

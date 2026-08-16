@@ -37,7 +37,16 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: Optional[str] = None
-    device_info: Optional[str] = None
+class OfficerRegisterRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, examples=["Officer Raj"])
+    email: EmailStr = Field(..., examples=["officer@city.gov.in"])
+    phone: Optional[str] = Field(None, min_length=8, max_length=20, examples=["+91 9876543210"])
+    password: str = Field(..., min_length=6, max_length=100, examples=["SecretPass123!"])
+    department: Optional[str] = Field(None, examples=["Water & Sewerage"])
+    department_id: Optional[int] = Field(None, examples=[1])
+    region: Optional[str] = Field(None, examples=["Central"])
+    employee_id: Optional[str] = Field(None, examples=["GOV-2026-8841"])
+    designation: Optional[str] = Field(None, examples=["Field Inspector"])
 
 
 class UserResponse(BaseModel):
@@ -51,6 +60,9 @@ class UserResponse(BaseModel):
     department_id: Optional[int] = None
     credibility_score: float
     status: UserStatus
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    rejection_reason: Optional[str] = None
     address: Optional[str] = None
     area: Optional[str] = None
     city: Optional[str] = None
@@ -72,6 +84,9 @@ class MeResponse(BaseModel):
     department_id: Optional[int] = None
     credibility_score: float
     status: UserStatus
+    designation: Optional[str] = None
+    employee_id: Optional[str] = None
+    rejection_reason: Optional[str] = None
     is_blocked: bool
     blocked_until: Optional[datetime] = None
     block_reason: Optional[str] = None

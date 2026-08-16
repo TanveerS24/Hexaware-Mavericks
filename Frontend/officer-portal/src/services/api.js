@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://hexaware-mavericks.onrender.com';
+// In development, Vite proxies /officer/* and /citizen/* → http://localhost:8000
+// Use empty base URL (relative) so all requests go through the proxy.
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
   constructor() {
@@ -47,31 +49,52 @@ class ApiClient {
 
   // 1. Officer Authentication (Supports both FastAPI Gateway & Node backend)
   async loginUser(credentials) {
-    try {
-      // Try FastAPI Gateway endpoint: /officer/auth/login
-      const res = await this.post('/officer/auth/login', credentials);
-      const token = res.access_token || res.token;
-      const user = res.user || {
-        id: res.user_id || 'officer-1',
-        name: res.name || 'Officer',
-        email: credentials.email,
-        role: 'officer',
-        officer_profile: {
-          department: res.department || 'Water & Sewerage',
-          region: res.region || 'Mumbai',
-          designation: res.designation || 'Field Officer',
-        }
-      };
-      return { user, token };
-    } catch (e) {
-      // Fallback to standard /api/auth/login or /auth/login
-      const res = await this.post('/auth/login', credentials);
-      return { user: res.user, token: res.token || res.access_token };
-    }
+    // Try FastAPI Gateway endpoint: /officer/auth/login
+    const res = await this.post('/officer/auth/login', credentials);
+    const token = res.access_token || res.token;
+    const user = res.user || {
+      id: res.user_id || 'officer-1',
+      name: res.name || 'Officer',
+      email: credentials.email,
+      role: 'officer',
+      officer_profile: {
+        department: res.department || 'Water & Sewerage',
+        region: res.region || 'Ward 4 (Central)',
+        designation: res.designation || 'Field Officer',
+      }
+    };
+    return { user, token };
   }
 
-  registerOfficer(data) { 
-    return this.post('/auth/register/officer', data).catch(() => this.post('/admin/users', { ...data, role: 'officer' })); 
+  async registerOfficer(data) { 
+    // Send WebSocket broadcast to live Admin Portals
+    try {
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/admin';
+      const ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'NEW_OFFICER_REGISTRATION',
+          officer: {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            department: data.department || 'Revenue & Land Dept',
+            department_id: data.department_id || 1,
+            role: 'officer',
+            designation: data.designation || 'Inspector',
+            employee_id: data.employee_id,
+            region: data.region || 'Ward 4 (Central)',
+            status: 'pending',
+          }
+        }));
+        setTimeout(() => ws.close(), 1200);
+      };
+    } catch (wsErr) {
+      console.warn('WS Broadcast to admin portal:', wsErr);
+    }
+
+    // Post to backend gateway
+    return await this.post('/officer/auth/register', data);
   }
 
   async getMe() { 

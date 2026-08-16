@@ -14,6 +14,8 @@ class UserRole(str, enum.Enum):
 
 class UserStatus(str, enum.Enum):
     ACTIVE = "active"
+    PENDING = "pending"
+    REJECTED = "rejected"
     BANNED = "banned"
 
 
@@ -25,6 +27,9 @@ class User(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True, index=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    designation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    employee_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     area: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
