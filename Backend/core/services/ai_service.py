@@ -68,19 +68,26 @@ class AIService:
         
         client = GeminiProvider.get_client()
         if client:
-            try:
-                # Use gemini-1.5-flash for multimodal transcription
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=[
-                        "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
-                        types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
-                    ]
-                )
-                if response and response.text:
-                    return response.text.strip()
-            except Exception as e:
-                return f"DEBUG ERROR (Generate Content Failed): {str(e)}"
+            # Try multiple models since the user's project might have specific access
+            models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro']
+            last_error = ""
+            for model_name in models_to_try:
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=[
+                            "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
+                            types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+                        ]
+                    )
+                    if response and response.text:
+                        return response.text.strip()
+                except Exception as e:
+                    last_error = str(e)
+                    continue
+            
+            # If all failed, return the last error
+            return f"DEBUG ERROR (Generate Content Failed for all models). Last error: {last_error}"
 
         init_error = getattr(settings, "GEMINI_INIT_ERROR", "Unknown or no client")
         api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", ""))
