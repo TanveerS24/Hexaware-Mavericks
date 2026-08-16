@@ -272,8 +272,13 @@ Response:"""
                         }
         except Exception as e:
             logger.warning(f"Cloud AI API request failed ({str(e)}). Using fallback classification.")
+            res = cls._heuristic_classify(transcript)
+            res["summary"] = f"DEBUG ERROR (Exception): {str(e)}"
+            return res
 
-        return cls._heuristic_classify(transcript)
+        res = cls._heuristic_classify(transcript)
+        res["summary"] = f"DEBUG ERROR (Generate Content Failed for all models). Last error: {getattr(resp, 'status_code', 'N/A')} {getattr(resp, 'text', 'No response text')}."
+        return res
 
     @classmethod
     async def translate_text(cls, text: str) -> str:
