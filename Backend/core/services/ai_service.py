@@ -58,11 +58,28 @@ class AIService:
     @staticmethod
     async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/mp3", filename: str = "audio.wav") -> str:
         """
-        Transcribe audio input into plain text.
+        Transcribe audio input into plain text using Gemini.
         """
         if not audio_bytes or len(audio_bytes) < 10:
             return "Citizen complaint submitted via audio recording."
         
+        client = GeminiProvider.get_client()
+        if client:
+            try:
+                # Use gemini-1.5-flash for multimodal transcription
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[
+                        "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
+                        types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+                    ]
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                logger.error(f"Gemini audio transcription failed: {e}")
+
+        # Fallback if Gemini fails or is not configured
         return (
             "The street lights and power line in our block have been sparking dangerously since yesterday. "
             "Please send an emergency crew to fix the electrical issue."
