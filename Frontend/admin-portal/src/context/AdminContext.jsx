@@ -62,6 +62,21 @@ export const AdminProvider = ({ children }) => {
     fetchAllData();
   }, [fetchAllData]);
 
+  // Handle token expiry across the session — clear token and redirect to /login
+  useEffect(() => {
+    const onTokenExpired = () => {
+      localStorage.removeItem('admin_access_token');
+      localStorage.removeItem('admin_user');
+      setUser(null);
+      toast.error('Session expired. Please log in again.', {
+        id: 'session-expired',
+        duration: 5000,
+      });
+    };
+    window.addEventListener('ADMIN_TOKEN_EXPIRED', onTokenExpired);
+    return () => window.removeEventListener('ADMIN_TOKEN_EXPIRED', onTokenExpired);
+  }, []);
+
   // Real-time BroadcastChannel Sync: allows instant communication across localhost ports
   useEffect(() => {
     let channel = null;
@@ -395,10 +410,18 @@ export const AdminProvider = ({ children }) => {
   const resetPendingOfficers = async () => {
     try {
       const officers = await api.getPendingOfficers();
-      setPendingOfficers(officers || []);
-      toast.success(`Pending requests refreshed! ${officers?.length || 0} applications ready for review.`);
+      // If 401 returned empty {}, officers will be undefined/empty \u2014 silently handled by ADMIN_TOKEN_EXPIRED event
+      if (Array.isArray(officers)) {
+        setPendingOfficers(officers);
+        toast.success(`Pending requests refreshed! ${officers.length} applications ready for review.`);
+      } else {
+        toast(`Queue refreshed — ${officers?.items?.length || 0} pending requests found.`, { icon: '🔄' });
+      }
     } catch (err) {
-      toast.error(`Failed to refresh: ${err.message}`);
+      // Only show error for non-auth failures
+      if (!err.message?.includes('expired') && !err.message?.includes('401')) {
+        toast.error(`Refresh failed: ${err.message}`);
+      }
     }
   };
 

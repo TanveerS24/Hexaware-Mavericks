@@ -14,7 +14,13 @@ const handleResponse = async (res) => {
   if (res.status === 503) {
     // DB offline — backend returns empty payload, treat as empty result
     const data = await res.json().catch(() => ({}));
-    return data; // { items: [], total: 0, points: [], trends: [] }
+    return data;
+  }
+  if (res.status === 401) {
+    // Token expired — fire event so AdminContext can prompt re-login
+    window.dispatchEvent(new CustomEvent('ADMIN_TOKEN_EXPIRED'));
+    // Return empty fallback data instead of throwing
+    return {};
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -22,6 +28,7 @@ const handleResponse = async (res) => {
   }
   return res.json();
 };
+
 
 export const api = {
   // 1. Auth — multi-tier fallback: Render → localhost:5000 → localhost:8000
