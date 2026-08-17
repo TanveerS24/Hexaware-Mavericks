@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
+# pyrefly: ignore [missing-import]
 from sqlalchemy import String, DateTime, ForeignKey, Integer, Text, func
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.db.base import Base
 
