@@ -2,9 +2,12 @@ import json
 import logging
 import re
 from typing import Dict, Any, Optional
-import httpx
-from google import genai
-from google.genai import types
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 from core.config import settings
 

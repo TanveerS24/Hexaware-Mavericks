@@ -389,7 +389,7 @@ class AuthService:
         try:
             result = await db.execute(select(User).where(User.email == data.email.lower().strip()))
             user = result.scalar_one_or_none()
-        except Exception:
+        except Exception as e:
             db_online = False
 
         if not user:
