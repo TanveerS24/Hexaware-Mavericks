@@ -7,27 +7,34 @@ const AppContext = createContext(null);
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
 export const AppProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('citizen_ai_user');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState(localStorage.getItem('citizen_ai_token'));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Load user on mount
+  // Verify session in background without forcing abrupt logouts
   useEffect(() => {
     if (token) {
       api.getMe()
         .then(({ user: u }) => {
-          setUser(u);
+          if (u) {
+            setUser(u);
+            localStorage.setItem('citizen_ai_user', JSON.stringify(u));
+          }
         })
-        .catch(() => {
-          logout();
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
+        .catch((err) => {
+          console.warn('Background session sync:', err?.message);
+        });
     }
   }, [token]);
 
@@ -39,7 +46,6 @@ export const AppProvider = ({ children }) => {
       channel.onmessage = (event) => {
         const msg = event.data;
         if (msg?.type === 'OFFICER_APPROVED' && msg.officer) {
-          // Trigger a re-auth if the current user was just approved
           window.dispatchEvent(new CustomEvent('account_approved', { detail: msg }));
         }
         if (msg?.type === 'OFFICER_REJECTED' && msg.officerId) {
@@ -54,7 +60,6 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
-
   // Setup Socket.IO when user is available
   useEffect(() => {
     if (!user) return;
@@ -68,25 +73,25 @@ export const AppProvider = ({ children }) => {
 
     newSocket.on('connect', () => {
       setIsConnected(true);
-      newSocket.emit('authenticate', {
-        userId: user.id,
-        role: user.role,
-        region: user.region || user.officer_profile?.region,
-        department: user.officer_profile?.department || user.department,
-      });
+      if (user.officer_profile?.department_id) {
+        newSocket.emit('join_department', user.officer_profile.department_id);
+      }
+      if (user.id) {
+        newSocket.emit('join_user', user.id);
+      }
     });
 
-    newSocket.on('disconnect', () => setIsConnected(false));
-
-    newSocket.on('new_complaint', (complaint) => {
-      window.dispatchEvent(new CustomEvent('new_complaint', { detail: complaint }));
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
     });
 
-    newSocket.on('complaint_assigned', (data) => {
-      window.dispatchEvent(new CustomEvent('complaint_assigned', { detail: data }));
+    newSocket.on('new_complaint', (data) => {
+      setNotifications(prev => [data, ...prev]);
+      setUnreadCount(c => c + 1);
+      window.dispatchEvent(new CustomEvent('new_complaint_received', { detail: data }));
     });
 
-    newSocket.on('complaint_update', (data) => {
+    newSocket.on('complaint_updated', (data) => {
       window.dispatchEvent(new CustomEvent('complaint_update', { detail: data }));
     });
 
@@ -130,6 +135,7 @@ export const AppProvider = ({ children }) => {
     const result = await api.loginUser(credentials);
     const { user: u, token: t } = result;
     localStorage.setItem('citizen_ai_token', t);
+    localStorage.setItem('citizen_ai_user', JSON.stringify(u));
     setToken(t);
     setUser(u);
     return u;
@@ -137,45 +143,57 @@ export const AppProvider = ({ children }) => {
 
   const logout = useCallback(() => {
     localStorage.removeItem('citizen_ai_token');
+    localStorage.removeItem('citizen_ai_user');
     setToken(null);
     setUser(null);
-    setNotifications([]);
-    setUnreadCount(0);
-    if (socket) socket.disconnect();
-  }, [socket]);
+  }, []);
 
-  const markNotificationRead = useCallback(async (id) => {
+  const markNotificationAsRead = useCallback(async (id) => {
     try {
       await api.markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      setUnreadCount(c => Math.max(0, c - 1));
     } catch (err) {
-      console.error(err);
+      console.error('Failed to mark notification read:', err);
     }
   }, []);
 
-  const value = {
-    user,
-    setUser,
-    token,
-    loading,
-    socket,
-    isConnected,
-    notifications,
-    unreadCount,
-    loadNotifications,
-    markNotificationRead,
-    login,
-    logout,
-  };
+  const markAllNotificationsAsRead = useCallback(async () => {
+    try {
+      await api.markAllRead();
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
+    }
+  }, []);
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={{
+      user,
+      token,
+      loading,
+      socket,
+      isConnected,
+      notifications,
+      unreadCount,
+      login,
+      logout,
+      markNotificationAsRead,
+      markAllNotificationsAsRead,
+      refreshNotifications: loadNotifications,
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
 };
 
 export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be inside AppProvider');
-  return ctx;
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
 };
 
 export default AppContext;
