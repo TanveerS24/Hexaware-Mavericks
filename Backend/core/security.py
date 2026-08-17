@@ -218,6 +218,41 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    request: Request,
+    token: Optional[str] = Depends(get_token_from_request),
+    db: AsyncSession = Depends(get_db)
+) -> Optional[User]:
+    """
+    Optional authentication dependency: returns User if valid token is supplied,
+    or None if unauthenticated / token missing / invalid without throwing 401.
+    """
+    payload = None
+    if hasattr(request.state, "user_payload") and request.state.user_payload:
+        payload = request.state.user_payload
+    elif token:
+        try:
+            payload = decode_token(token)
+        except Exception:
+            payload = None
+
+    if not payload:
+        return None
+
+    try:
+        user_id_raw = payload.get("user_id", payload.get("sub"))
+        email_raw = payload.get("email")
+        user = None
+        if user_id_raw is not None and str(user_id_raw).isdigit():
+            result = await db.execute(select(User).where(User.id == int(user_id_raw)))
+            user = result.scalar_one_or_none()
+        if not user and email_raw:
+            result = await db.execute(select(User).where(User.email == email_raw.lower().strip()))
+            user = result.scalar_one_or_none()
+        return user
+    except Exception:
+        return None
+
 
 def require_roles(*allowed_roles: UserRole):
     """

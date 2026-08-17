@@ -32,16 +32,19 @@ const AIChatbot = () => {
 
     try {
       const token = localStorage.getItem('access_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const response = await api.post('/chatbot', 
         { message: queryText },
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        { headers }
       );
       
+      const resData = response?.data || response || {};
+      const botReply = resData.reply || resData.response || (typeof resData === 'string' ? resData : 'I am ready to assist you.');
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: response.data.reply,
-        can_auto_file: response.data.can_auto_file,
-        extracted_issue_draft: response.data.extracted_issue_draft
+        content: botReply,
+        can_auto_file: resData.can_auto_file || false,
+        extracted_issue_draft: resData.extracted_issue_draft || null
       }]);
     } catch (err) {
       console.error("Chatbot error:", err);

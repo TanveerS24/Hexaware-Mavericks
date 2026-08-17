@@ -346,7 +346,7 @@ export const MapVisualizer = ({
 
         {/* Interactive Grievance Point Markers with Status Icons */}
         {showPins &&
-          filteredPoints.map((pt) => {
+          filteredPoints.map((pt, idx) => {
             const { x, y } = projectCoord(pt.lat, pt.lng);
             const isSelected = selectedPointId === pt.id || activePoint?.id === pt.id;
             const categoryColor = getCategoryColor(pt.category);
@@ -358,7 +358,7 @@ export const MapVisualizer = ({
 
             return (
               <div
-                key={pt.id}
+                key={pt.id ? `pin-${pt.id}-${idx}` : `pin-idx-${idx}`}
                 onClick={() => handlePointClick(pt)}
                 style={{
                   position: 'absolute',

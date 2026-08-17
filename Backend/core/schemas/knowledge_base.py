@@ -32,11 +32,13 @@ class ChatbotQueryRequest(BaseModel):
 
 class ChatbotResponse(BaseModel):
     reply: str
+    response: Optional[str] = None
     suggested_category: Optional[str] = None
     suggested_department_id: Optional[int] = None
     relevant_articles: List[str] = []
     can_auto_file: bool = False
     extracted_issue_draft: Optional[dict] = None
+
 
 
 class FAQResponse(BaseModel):
