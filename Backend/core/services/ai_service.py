@@ -4,11 +4,11 @@ import re
 from typing import Dict, Any, Optional
 import httpx
 try:
-    from google import genai
-    from google.genai import types
+    from google import genai  # type: ignore
+    from google.genai import types  # type: ignore
 except ImportError:
-    genai = None
-    types = None
+    genai = None  # type: ignore
+    types = None  # type: ignore
 
 from core.config import settings
 
@@ -17,14 +17,16 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider:
     @staticmethod
-    def get_client() -> Optional[genai.Client]:
+    def get_client() -> Optional[Any]:
+        if genai is None:
+            return None
         # Fallback to AI_API_KEY if GOOGLE_API_KEY isn't explicitly set
         api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", None))
         try:
             return genai.Client(api_key=api_key)
         except Exception as e:
             # We want to know if this is failing
-            settings.GEMINI_INIT_ERROR = str(e)
+            setattr(settings, "GEMINI_INIT_ERROR", str(e))
             return None
 
     @staticmethod
@@ -71,17 +73,18 @@ class AIService:
             return "Citizen complaint submitted via audio recording."
         
         client = GeminiProvider.get_client()
-        if client:
+        if client and types is not None:
             # Try multiple models since the user's project might have specific access
             models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro']
             last_error = ""
             for model_name in models_to_try:
                 try:
+                    part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
                     response = client.models.generate_content(
                         model=model_name,
                         contents=[
                             "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
-                            types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+                            part
                         ]
                     )
                     if response and response.text:
