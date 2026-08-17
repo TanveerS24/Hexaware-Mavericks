@@ -1,7 +1,6 @@
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Integer, func
+from sqlalchemy import DateTime, ForeignKey, Integer, func, ARRAY, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pgvector.sqlalchemy import Vector
 from core.db.base import Base
 
 
@@ -16,7 +15,7 @@ class IssueEmbedding(Base):
         unique=True,
         index=True
     )
-    embedding = mapped_column(Vector(768), nullable=False)
+    embedding = mapped_column(ARRAY(Float), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

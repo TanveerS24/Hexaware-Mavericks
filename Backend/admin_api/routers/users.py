@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,10 +81,10 @@ async def list_pending_officers(
             employee_id=o.get("employee_id"),
             status=o["status"],
             credibility_score=o.get("credibility_score", 1.0),
-            created_at=o.get("created_at")
+            created_at=o.get("created_at") or datetime.now(timezone.utc)
         )
         for o in IN_MEMORY_OFFICERS
-        if o["status"] == UserStatus.PENDING
+        if str(o.get("status")) in (UserStatus.PENDING.value, "pending")
     ]
     return UserListResponse(
         total=len(pending_mems),

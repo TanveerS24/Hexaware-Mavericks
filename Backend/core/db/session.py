@@ -16,7 +16,9 @@ engine: AsyncEngine = create_async_engine(
     max_overflow=20,
     connect_args={
         "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0
+        "prepared_statement_cache_size": 0,
+        "command_timeout": 5,
+        "timeout": 5
     }
 )
 

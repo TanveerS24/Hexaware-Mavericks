@@ -27,76 +27,77 @@ from core.security import (
 
 
 # Shared in-memory mock store for officer registrations when DB is offline
-IN_MEMORY_OFFICERS = [
-    {
-        "id": 101,
-        "name": "Inspector Anil Verma",
-        "email": "anil.verma@city.gov.in",
-        "phone": "+91 98450 11223",
-        "department": "Water & Sanitation Dept",
-        "department_id": 1,
-        "role": UserRole.OFFICER,
-        "designation": "Assistant Engineer (Pipelines)",
-        "employee_id": "GOV-2026-WTR-041",
-        "region": "Ward 4 (Central)",
-        "status": UserStatus.PENDING,
-        "credibility_score": 1.0,
-        "rejection_reason": None,
-        "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW", # Officer@123
-        "created_at": datetime.now(timezone.utc)
-    },
-    {
-        "id": 102,
-        "name": "Assistant Engineer Priya Sharma",
-        "email": "priya.sharma@city.gov.in",
-        "phone": "+91 98765 44332",
-        "department": "Electricity & Power Supply",
-        "department_id": 2,
-        "role": UserRole.OFFICER,
-        "designation": "Junior Grid Inspector",
-        "employee_id": "GOV-2026-PWR-088",
-        "region": "Ward 7 (Koramangala)",
-        "status": UserStatus.PENDING,
-        "credibility_score": 1.0,
-        "rejection_reason": None,
-        "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "created_at": datetime.now(timezone.utc)
-    },
-    {
-        "id": 103,
-        "name": "Officer Suresh Nair",
-        "email": "suresh.nair@city.gov.in",
-        "phone": "+91 94480 55667",
-        "department": "Roads & Civil Infrastructure",
-        "department_id": 3,
-        "role": UserRole.OFFICER,
-        "designation": "Roadworks Site Supervisor",
-        "employee_id": "GOV-2026-RDS-102",
-        "region": "Ward 12 (Indiranagar)",
-        "status": UserStatus.PENDING,
-        "credibility_score": 1.0,
-        "rejection_reason": None,
-        "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "created_at": datetime.now(timezone.utc)
-    },
-    {
-        "id": 104,
-        "name": "Inspector King",
-        "email": "king123@gmail.com",
-        "phone": "+91 90876 54321",
-        "department": "Revenue & Land Dept",
-        "department_id": 4,
-        "role": UserRole.OFFICER,
-        "designation": "Inspector",
-        "employee_id": "GOV-2025-1234",
-        "region": "Chennai / Ward 4",
-        "status": UserStatus.PENDING,
-        "credibility_score": 1.0,
-        "rejection_reason": None,
-        "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "created_at": datetime.now(timezone.utc)
-    }
-]
+# Persistent JSON helper to persist registrations across backend restarts
+import json
+import os
+
+JSON_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "in_memory_officers.json"))
+
+def _load_persisted_officers() -> list:
+    if not os.path.exists(JSON_PATH):
+        # Pre-seed with default officers if file doesn't exist
+        defaults = [
+            {
+                "id": 101,
+                "name": "Inspector Anil Verma",
+                "email": "anil.verma@city.gov.in",
+                "phone": "+91 98450 11223",
+                "department": "Water & Sanitation Dept",
+                "department_id": 1,
+                "role": "officer",
+                "designation": "Assistant Engineer (Pipelines)",
+                "employee_id": "GOV-2026-WTR-041",
+                "region": "Ward 4 (Central)",
+                "status": "pending",
+                "credibility_score": 1.0,
+                "rejection_reason": None,
+                "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW", # Officer@123
+                "created_at": datetime.now(timezone.utc).isoformat()
+            },
+            {
+                "id": 102,
+                "name": "Assistant Engineer Priya Sharma",
+                "email": "priya.sharma@city.gov.in",
+                "phone": "+91 98765 44332",
+                "department": "Electricity & Power Supply",
+                "department_id": 2,
+                "role": "officer",
+                "designation": "Junior Grid Inspector",
+                "employee_id": "GOV-2026-PWR-088",
+                "region": "Ward 7 (Koramangala)",
+                "status": "pending",
+                "credibility_score": 1.0,
+                "rejection_reason": None,
+                "password_hash": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW", # Officer@123
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        _save_persisted_officers(defaults)
+        return defaults
+    try:
+        with open(JSON_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_persisted_officers(officers: list):
+    try:
+        serializable = []
+        for o in officers:
+            item = o.copy()
+            if isinstance(item.get("created_at"), datetime):
+                item["created_at"] = item["created_at"].isoformat()
+            if not isinstance(item.get("role"), str) and item.get("role"):
+                item["role"] = item["role"].value
+            if not isinstance(item.get("status"), str) and item.get("status"):
+                item["status"] = item["status"].value
+            serializable.append(item)
+        with open(JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2)
+    except Exception as e:
+        print(f"Error saving in_memory_officers.json: {e}")
+
+IN_MEMORY_OFFICERS = _load_persisted_officers()
 
 # ── DB-offline fallback: pre-seeded demo credentials ──────────────────────────
 # Passwords are hashed once at module load so verify_password() works offline.
@@ -213,6 +214,7 @@ class AuthService:
         global IN_MEMORY_OFFICERS
         IN_MEMORY_OFFICERS = [o for o in IN_MEMORY_OFFICERS if o["email"].lower() != user.email.lower()]
         IN_MEMORY_OFFICERS.insert(0, officer_dict)
+        _save_persisted_officers(IN_MEMORY_OFFICERS)
 
         try:
             db.add(user)
@@ -244,6 +246,7 @@ class AuthService:
                     off["department_id"] = department_id
                 matched_mem = off
                 break
+        _save_persisted_officers(IN_MEMORY_OFFICERS)
 
         user = None
         try:
@@ -300,6 +303,7 @@ class AuthService:
                 off["rejection_reason"] = rejection_msg
                 matched_mem = off
                 break
+        _save_persisted_officers(IN_MEMORY_OFFICERS)
 
         user = None
         try:
@@ -403,11 +407,11 @@ class AuthService:
                         email=off["email"],
                         phone=off.get("phone"),
                         password_hash=off["password_hash"],
-                        role=off["role"],
+                        role=UserRole(off["role"]) if isinstance(off["role"], str) else off["role"],
                         department_id=off.get("department_id"),
-                        status=off["status"],
+                        status=UserStatus(off["status"]) if isinstance(off["status"], str) else off["status"],
                         credibility_score=off.get("credibility_score", 1.0),
-                        created_at=off.get("created_at", datetime.now(timezone.utc))
+                        created_at=datetime.fromisoformat(off["created_at"].replace("Z", "+00:00")) if off.get("created_at") else datetime.now(timezone.utc)
                     )
                     break
 

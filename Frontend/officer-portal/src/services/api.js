@@ -31,6 +31,15 @@ class ApiClient {
     }
 
     const response = await fetch(url, options);
+
+    if (response.status === 401) {
+      localStorage.removeItem('citizen_ai_token');
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+      throw new Error('Session expired. Please log in again.');
+    }
+
     const result = await response.json().catch(() => ({ error: 'Invalid response format' }));
 
     if (!response.ok) {

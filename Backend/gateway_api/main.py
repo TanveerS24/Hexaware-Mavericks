@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     """
     try:
         async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            # await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database initialized successfully.")
     except Exception as e:

@@ -9,7 +9,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision: str = '001_initial_schema'
@@ -19,8 +18,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 0. Enable pgvector extension
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    # 0. Enable pgvector extension (disabled for local compat)
+    # op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # 1. Departments table
     op.create_table(
@@ -195,7 +194,7 @@ def upgrade() -> None:
         sa.Column('department_id', sa.Integer(), nullable=True),
         sa.Column('title', sa.String(length=255), nullable=False),
         sa.Column('content', sa.Text(), nullable=False),
-        sa.Column('embedding', Vector(768), nullable=True),
+        sa.Column('embedding', postgresql.ARRAY(sa.Float), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['department_id'], ['departments.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -207,7 +206,7 @@ def upgrade() -> None:
         'issue_embeddings',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('issue_id', sa.Integer(), nullable=False),
-        sa.Column('embedding', Vector(768), nullable=False),
+        sa.Column('embedding', postgresql.ARRAY(sa.Float), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['issue_id'], ['issues.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),

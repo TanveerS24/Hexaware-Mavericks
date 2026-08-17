@@ -16,6 +16,15 @@ const handleResponse = async (res) => {
     const data = await res.json().catch(() => ({}));
     return data; // { items: [], total: 0, points: [], trends: [] }
   }
+  if (res.status === 401) {
+    // Token expired or unauthorized
+    localStorage.removeItem('admin_user');
+    localStorage.removeItem('admin_access_token');
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login';
+    }
+    throw new Error('Session expired. Please log in again.');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || err.detail || `HTTP ${res.status}`);
