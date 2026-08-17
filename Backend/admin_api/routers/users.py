@@ -68,7 +68,8 @@ async def list_pending_officers(
         pass
 
     # In-memory fallback
-    from core.services.auth_service import IN_MEMORY_OFFICERS
+    from core.services.auth_service import _load_persisted_officers
+    IN_MEMORY_OFFICERS = _load_persisted_officers()
     pending_mems = [
         UserResponse(
             id=o["id"],

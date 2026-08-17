@@ -48,7 +48,8 @@ from citizen_api.routers import (
 from officer_api.routers import (
     auth as officer_auth,
     queue as officer_queue,
-    issues as officer_issues
+    issues as officer_issues,
+    notifications as officer_notifications
 )
 from admin_api.routers import (
     auth as admin_auth,
@@ -149,6 +150,7 @@ app.include_router(citizen_notifications.router, prefix="/citizen")
 app.include_router(officer_auth.router, prefix="/officer")
 app.include_router(officer_queue.router, prefix="/officer")
 app.include_router(officer_issues.router, prefix="/officer")
+app.include_router(officer_notifications.router, prefix="")
 
 # --- Admin Dashboard Routes (/admin) ---
 app.include_router(admin_auth.router, prefix="/admin")

@@ -7,7 +7,8 @@ from core.db.session import get_db
 from core.exceptions import UnauthorizedError
 from core.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest, OfficerRegisterRequest, UserResponse
 from core.services.auth_service import AuthService
-from core.models.users import UserRole
+from core.models.users import UserRole, User
+from core.security import get_current_user
 from fastapi import status
 
 router = APIRouter(tags=["Officer Authentication"])
@@ -122,3 +123,73 @@ async def logout(
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
+
+
+@router.get("/me")
+async def get_officer_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns the authenticated officer's profile with lazy-load and offline fallbacks.
+    """
+    # For department name
+    dept_name = None
+    if current_user.department_id:
+        try:
+            # Try to fetch department from database if online
+            from core.models.departments import Department
+            from sqlalchemy import select
+            result = await db.execute(select(Department).where(Department.id == current_user.department_id))
+            dept = result.scalar_one_or_none()
+            if dept:
+                dept_name = dept.name
+        except Exception:
+            pass
+
+    # If DB is offline or department name not found in DB, try to find in IN_MEMORY_OFFICERS
+    if not dept_name:
+        try:
+            from core.services.auth_service import _load_persisted_officers
+            IN_MEMORY_OFFICERS = _load_persisted_officers()
+            for off in IN_MEMORY_OFFICERS:
+                if off["email"].lower() == current_user.email.lower():
+                    dept_name = off.get("department")
+                    break
+        except Exception:
+            pass
+
+    # Default fallback department name if none found
+    if not dept_name:
+        dept_name = "Water & Sanitation Dept"
+
+    # Region (we mapped region to area and city during registration)
+    region = current_user.area or current_user.city
+    if not region:
+        try:
+            from core.services.auth_service import _load_persisted_officers
+            IN_MEMORY_OFFICERS = _load_persisted_officers()
+            for off in IN_MEMORY_OFFICERS:
+                if off["email"].lower() == current_user.email.lower():
+                    region = off.get("region")
+                    break
+        except Exception:
+            pass
+    if not region:
+        region = "Ward 4 (Central)"
+
+    user_data = {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "role": current_user.role,
+        "department_id": current_user.department_id,
+        "department": dept_name,
+        "region": region,
+        "designation": current_user.designation,
+        "employee_id": current_user.employee_id,
+        "status": current_user.status,
+        "credibility_score": current_user.credibility_score
+    }
+    return {"user": user_data}

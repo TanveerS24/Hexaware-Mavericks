@@ -212,6 +212,7 @@ class AuthService:
         }
         # Replace if email already in memory or prepend
         global IN_MEMORY_OFFICERS
+        IN_MEMORY_OFFICERS = _load_persisted_officers()
         IN_MEMORY_OFFICERS = [o for o in IN_MEMORY_OFFICERS if o["email"].lower() != user.email.lower()]
         IN_MEMORY_OFFICERS.insert(0, officer_dict)
         _save_persisted_officers(IN_MEMORY_OFFICERS)
@@ -237,6 +238,7 @@ class AuthService:
         Transitions status from PENDING -> ACTIVE and dispatches in-app notification.
         """
         global IN_MEMORY_OFFICERS
+        IN_MEMORY_OFFICERS = _load_persisted_officers()
         matched_mem = None
         for off in IN_MEMORY_OFFICERS:
             if off["id"] == user_id:
@@ -296,6 +298,7 @@ class AuthService:
         rejection_msg = reason.strip() if reason else "Government employee credentials could not be verified in the municipal staff directory."
         
         global IN_MEMORY_OFFICERS
+        IN_MEMORY_OFFICERS = _load_persisted_officers()
         matched_mem = None
         for off in IN_MEMORY_OFFICERS:
             if off["id"] == user_id:
@@ -399,6 +402,8 @@ class AuthService:
         if not user:
             # Try in-memory registered officers
             email_lower = data.email.lower().strip()
+            global IN_MEMORY_OFFICERS
+            IN_MEMORY_OFFICERS = _load_persisted_officers()
             for off in IN_MEMORY_OFFICERS:
                 if off["email"].lower() == email_lower:
                     user = User(

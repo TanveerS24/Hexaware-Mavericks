@@ -16,7 +16,7 @@ router = APIRouter(prefix="/queue", tags=["Officer Department Queue"])
 async def get_officer_queue(
     ward: Optional[str] = Query(None, description="Optional ward filter within officer department"),
     priority: Optional[IssuePriority] = Query(None, description="Filter by priority (high, medium, low)"),
-    status: Optional[IssueStatus] = Query(None, description="Filter by grievance status"),
+    status: Optional[str] = Query(None, description="Filter by grievance status (pending, in_progress, resolved, etc.)"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_roles(UserRole.OFFICER, UserRole.ADMIN)),
@@ -28,12 +28,27 @@ async def get_officer_queue(
     """
     dept_id = current_user.department_id
 
+    db_status = None
+    if status:
+        status_lower = status.lower()
+        if status_lower == "pending":
+            db_status = IssueStatus.NEW
+        else:
+            try:
+                db_status = IssueStatus(status_lower)
+            except ValueError:
+                from fastapi import HTTPException
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid status: '{status}'. Must be 'pending' or one of {[s.value for s in IssueStatus]}"
+                )
+
     issues, total = await IssueService.get_queue(
         db=db,
         department_id=dept_id,
         ward=ward,
         priority=priority,
-        status=status,
+        status=db_status,
         limit=limit,
         offset=offset
     )
