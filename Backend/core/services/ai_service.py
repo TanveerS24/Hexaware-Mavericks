@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from typing import Dict, Any, Optional
+import httpx
 try:
     from google import genai
     from google.genai import types
@@ -392,8 +393,40 @@ Citizen's Question:
                     ai_model = "grok-beta"
                     settings.AI_BASE_URL = "https://api.x.ai/v1"
 
-                # Use OpenAI compatible format for Grok/OpenAI
-                if provider != "gemini" and provider not in ["claude", "anthropic"]:
+                # 1. Anthropic Claude API
+                if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
+                    url = f"{base_url}/messages"
+                    headers = {
+                        "x-api-key": ai_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    }
+                    payload = {
+                        "model": ai_model if "claude" in ai_model.lower() else "claude-3-5-haiku-20241022",
+                        "max_tokens": 1024,
+                        "system": "You are an AI assistant for a municipal citizen grievance portal. You output strictly a valid JSON object matching the requested schema with no markdown decoration.",
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.2
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content_blocks = data.get("content", [])
+                        if content_blocks and content_blocks[0].get("type") == "text":
+                            raw_text = content_blocks[0].get("text", "{}").strip()
+                            clean_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+                            return json.loads(clean_text)
+
+                # 2. Gemini
+                elif provider == "gemini" or "gemini" in ai_model.lower():
+                    result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
+                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
+
+                # 3. OpenAI / Grok compatible
+                else:
                     base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
@@ -413,11 +446,6 @@ Citizen's Question:
                     if resp.status_code == 200:
                         raw_json = resp.json()["choices"][0]["message"]["content"].strip()
                         return json.loads(raw_json)
-                
-                # If Gemini
-                elif provider == "gemini":
-                    result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
-                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
                     
         except Exception as e:
             logger.warning(f"Chatbot API request failed ({str(e)}).")
