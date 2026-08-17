@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import toast from 'react-hot-toast';
-import { ShieldCheck, Lock, Mail, ArrowRight, Building2, Droplets, Zap, Truck } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ email: 'officer@citizenai.gov.in', password: 'Officer@123' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const { login } = useApp();
   const navigate = useNavigate();
@@ -27,10 +27,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const setDemoOfficer = (email) => {
-    setForm({ email, password: 'Officer@123' });
   };
 
   return (
@@ -58,11 +54,12 @@ export default function LoginPage() {
                 <input
                   type="email"
                   className="form-input"
-                  placeholder="name@domain.gov.in"
+                  placeholder="e.g. officer.water@city.gov"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   autoComplete="email"
                   style={{ paddingLeft: 38 }}
+                  required
                 />
                 <Mail size={16} color="var(--text-dim)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               </div>
@@ -74,11 +71,12 @@ export default function LoginPage() {
                 <input
                   type="password"
                   className="form-input"
-                  placeholder="••••••••"
+                  placeholder="Enter your security password"
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   autoComplete="current-password"
                   style={{ paddingLeft: 38 }}
+                  required
                 />
                 <Lock size={16} color="var(--text-dim)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               </div>
@@ -93,46 +91,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <div style={{
-            marginTop: 22, padding: '14px',
-            background: 'rgba(255, 255, 255, 0.02)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-subtle)',
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-              Quick Officer Switch (Demo)
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button 
-                type="button" 
-                onClick={() => setDemoOfficer('officer@citizenai.gov.in')}
-                className="btn btn-secondary btn-sm"
-                style={{ justifyContent: 'flex-start', fontSize: 12 }}
-              >
-                <Droplets size={14} color="#38bdf8" />
-                <span>Water: <b>officer@citizenai.gov.in</b></span>
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setDemoOfficer('officer.electricity@citizenai.gov.in')}
-                className="btn btn-secondary btn-sm"
-                style={{ justifyContent: 'flex-start', fontSize: 12 }}
-              >
-                <Zap size={14} color="#fbbf24" />
-                <span>Electricity: <b>officer.electricity@citizenai.gov.in</b></span>
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setDemoOfficer('officer.transport@citizenai.gov.in')}
-                className="btn btn-secondary btn-sm"
-                style={{ justifyContent: 'flex-start', fontSize: 12 }}
-              >
-                <Truck size={14} color="#34d399" />
-                <span>Roads: <b>officer.transport@citizenai.gov.in</b></span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>

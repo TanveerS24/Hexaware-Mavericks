@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Security & Tokens
     JWT_SECRET_KEY: str = "default_secret_key_change_in_production_38d92a10b4"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Supabase Configuration

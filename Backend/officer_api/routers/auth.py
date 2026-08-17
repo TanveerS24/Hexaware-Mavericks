@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.db.session import get_db
 from core.exceptions import UnauthorizedError
-from core.models.users import UserRole
 from core.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest, OfficerRegisterRequest, UserResponse
 from core.services.auth_service import AuthService
 from fastapi import status

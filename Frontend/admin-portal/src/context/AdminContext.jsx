@@ -87,10 +87,8 @@ export const AdminProvider = ({ children }) => {
 
   // Real-time WebSocket connection to Gateway / Backend for live map status updates
   useEffect(() => {
-    const rawGateway = import.meta.env.VITE_API_GATEWAY_URL || 'https://hexaware-mavericks.onrender.com';
-    const cleanHost = rawGateway.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const wsProto = rawGateway.startsWith('https') || window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = import.meta.env.VITE_WS_URL || `${wsProto}//${cleanHost}/ws/admin`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws/admin`;
     let socket = null;
     let reconnectTimeout = null;
 
@@ -287,7 +285,7 @@ export const AdminProvider = ({ children }) => {
   const toggleBlockUser = async (userId, tier = '3d', reason = 'Malicious activity detected') => {
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_GATEWAY_URL || 'https://hexaware-mavericks.onrender.com'}/admin/users/${userId}/block`,
+        `${import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000'}/admin/users/${userId}/block`,
         {
           method: 'POST',
           headers: {
@@ -311,7 +309,7 @@ export const AdminProvider = ({ children }) => {
   const adjustCredibility = async (userId, delta, reason) => {
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_GATEWAY_URL || 'https://hexaware-mavericks.onrender.com'}/admin/users/${userId}/credibility`,
+        `${import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000'}/admin/users/${userId}/credibility`,
         {
           method: 'POST',
           headers: {

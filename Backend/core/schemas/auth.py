@@ -37,7 +37,6 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: Optional[str] = None
-    device_info: Optional[str] = None
 class OfficerRegisterRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, examples=["Officer Raj"])
     email: EmailStr = Field(..., examples=["officer@city.gov.in"])

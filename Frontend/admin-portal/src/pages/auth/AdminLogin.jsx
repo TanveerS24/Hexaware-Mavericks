@@ -7,8 +7,8 @@ export const AdminLogin = () => {
   const { login, loading } = useAdmin();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('admin@city.gov');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,23 +130,6 @@ export const AdminLogin = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-            </div>
-          </div>
-
-          {/* Seed Credentials Quick Info */}
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: '8px',
-              background: 'rgba(56, 189, 248, 0.08)',
-              border: '1px solid rgba(56, 189, 248, 0.2)',
-              fontSize: '12px',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <span style={{ fontWeight: 700, color: '#38bdf8' }}>Demo Admin Login:</span>
-            <div style={{ marginTop: 2, fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#94a3b8' }}>
-              admin@city.gov / Admin@123
             </div>
           </div>
 

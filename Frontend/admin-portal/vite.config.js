@@ -9,15 +9,14 @@ export default defineConfig({
     host: true,
     proxy: {
       '/admin': {
-        target: 'https://hexaware-mavericks.onrender.com',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/ws': {
-        target: 'wss://hexaware-mavericks.onrender.com',
+        target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
-        secure: false,
       },
     }
   }

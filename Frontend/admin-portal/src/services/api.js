@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || 'https://hexaware-mavericks.onrender.com';
+// In development, Vite proxies /admin/* → http://localhost:8000/admin/*
+// so we use an empty base URL (relative). In production, set VITE_API_GATEWAY_URL.
+const BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || '';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('admin_access_token');
