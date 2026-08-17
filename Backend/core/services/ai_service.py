@@ -2,13 +2,12 @@ import json
 import logging
 import re
 from typing import Dict, Any, Optional
-import httpx
 try:
-    from google import genai  # type: ignore
-    from google.genai import types  # type: ignore
+    from google import genai
+    from google.genai import types
 except ImportError:
-    genai = None  # type: ignore
-    types = None  # type: ignore
+    genai = None
+    types = None
 
 from core.config import settings
 
@@ -17,16 +16,14 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider:
     @staticmethod
-    def get_client() -> Optional[Any]:
-        if genai is None:
-            return None
+    def get_client() -> Optional[genai.Client]:
         # Fallback to AI_API_KEY if GOOGLE_API_KEY isn't explicitly set
         api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", None))
         try:
             return genai.Client(api_key=api_key)
         except Exception as e:
             # We want to know if this is failing
-            setattr(settings, "GEMINI_INIT_ERROR", str(e))
+            settings.GEMINI_INIT_ERROR = str(e)
             return None
 
     @staticmethod
@@ -73,18 +70,17 @@ class AIService:
             return "Citizen complaint submitted via audio recording."
         
         client = GeminiProvider.get_client()
-        if client and types is not None:
+        if client:
             # Try multiple models since the user's project might have specific access
             models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro']
             last_error = ""
             for model_name in models_to_try:
                 try:
-                    part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
                     response = client.models.generate_content(
                         model=model_name,
                         contents=[
                             "Please accurately transcribe this audio recording. Return ONLY the transcribed text, with no extra commentary or formatting.",
-                            part
+                            types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
                         ]
                     )
                     if response and response.text:
@@ -192,7 +188,7 @@ Response:"""
 
                 # 1. Anthropic Claude API
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {
                         "x-api-key": ai_api_key,
@@ -229,7 +225,7 @@ Response:"""
 
                 # 2. Google Gemini API
                 elif provider == "gemini" or "gemini" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
+                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
                     models_to_try = [ai_model, "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
                     
                     for model in models_to_try:
@@ -269,7 +265,7 @@ Response:"""
 
                 # 3. OpenAI or OpenAI-compatible API
                 else:
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
                         "Authorization": f"Bearer {ai_api_key}",
@@ -328,7 +324,7 @@ Response:"""
 
                 # 1. Anthropic
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {"x-api-key": ai_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
                     payload = {
@@ -345,7 +341,7 @@ Response:"""
 
                 # 2. Google Gemini
                 elif provider == "gemini" or "gemini" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
+                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
                     model_name = ai_model if "models/" in ai_model else f"models/{ai_model}"
                     url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
                     payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}
@@ -357,7 +353,7 @@ Response:"""
 
                 # 3. OpenAI or Grok
                 else:
-                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {"Authorization": f"Bearer {ai_api_key}", "Content-Type": "application/json"}
                     payload = {
@@ -428,7 +424,7 @@ Citizen's Question:
                     settings.AI_BASE_URL = "https://api.x.ai/v1"
 
                 # 1. Anthropic Claude API
-                if (provider in ["claude", "anthropic"] or "claude" in ai_model.lower()) and ai_api_key:
+                if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
                     base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {
@@ -450,21 +446,17 @@ Citizen's Question:
                         data = resp.json()
                         content_blocks = data.get("content", [])
                         if content_blocks and content_blocks[0].get("type") == "text":
-                            parsed = _extract_json(content_blocks[0].get("text", "{}"))
-                            if parsed and "reply" in parsed:
-                                return parsed
+                            raw_text = content_blocks[0].get("text", "{}").strip()
+                            clean_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+                            return json.loads(clean_text)
 
                 # 2. Gemini
-                elif (provider == "gemini" or "gemini" in ai_model.lower()) and (ai_api_key or getattr(settings, "GOOGLE_API_KEY", None)):
+                elif provider == "gemini" or "gemini" in ai_model.lower():
                     result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
-                    if result:
-                        parsed = _extract_json(result)
-                        if parsed and "reply" in parsed:
-                            return parsed
-                        return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
+                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
 
                 # 3. OpenAI / Grok compatible
-                elif ai_api_key:
+                else:
                     base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
@@ -483,26 +475,24 @@ Citizen's Question:
                     resp = await client.post(url, headers=headers, json=payload)
                     if resp.status_code == 200:
                         raw_json = resp.json()["choices"][0]["message"]["content"].strip()
-                        parsed = _extract_json(raw_json)
-                        if parsed and "reply" in parsed:
-                            return parsed
+                        return json.loads(raw_json)
                     
         except Exception as e:
-            logger.warning(f"Chatbot API request failed ({str(e)}). Using smart fallback.")
+            logger.warning(f"Chatbot API request failed ({str(e)}).")
 
         # Intelligent Fallback Redirection & Triage when Cloud LLM is offline or has 0 credits
         q_lower = user_query.lower().strip()
 
         # 1. Check if citizen is reporting an issue
-        is_reporting = any(w in q_lower for w in ["report", "leak", "power", "outage", "pothole", "garbage", "waste", "drain", "water", "electricity", "street", "pipe", "sewage", "broken", "issue", "complaint", "repair", "accident", "overflow"])
+        is_reporting = any(w in q_lower for w in ["report", "leak", "power", "outage", "pothole", "garbage", "waste", "drain", "water", "electricity", "street", "pipe", "sewage", "bill", "broken", "issue", "complaint", "repair"])
         
-        if is_reporting and not any(w in q_lower for w in ["track", "status of", "how to report"]):
+        if is_reporting:
             heuristic = cls._heuristic_classify(user_query)
-            cat = heuristic.get("category", "Municipal Administration")
+            cat = heuristic.get("category", "General")
             prio = heuristic.get("priority", "medium")
             summ = heuristic.get("summary", user_query)
             return {
-                "reply": f"I've extracted your grievance details for {cat}. You can review the draft below and submit it directly to the department.",
+                "reply": f"I've extracted your grievance details for {cat.title()}. You can review the draft below and submit it directly to the department.",
                 "can_auto_file": True,
                 "extracted_issue_draft": {
                     "transcript": user_query,
@@ -512,12 +502,12 @@ Citizen's Question:
                 }
             }
 
-        # 2. Check if citizen is asking about complaint status / tracking
+        # 2. Check if citizen is asking about complaint status
         if any(w in q_lower for w in ["status", "track", "my complaint", "check", "updates", "progress"]):
-            if "no active or past complaints" in context_data.lower() or "not logged in" in context_data.lower():
-                reply_text = "You currently do not have any active complaints registered in this session. If you have filed an issue earlier, please ensure you are logged in, or submit a new grievance to get real-time status tracking."
+            if "no active or past complaints" in context_data.lower():
+                reply_text = "You currently do not have any active or past complaints registered in your account. If you are experiencing a civic issue, please let me know or use the Report section."
             else:
-                reply_text = f"Here is the current status of your registered grievance(s):\n\n{context_data}\n\nOur field officers are actively assigned and addressing high-priority items."
+                reply_text = f"Here is the summary of your registered grievances:\n\n{context_data}\n\nOur field officers are actively working on resolving high-priority issues."
             return {
                 "reply": reply_text,
                 "can_auto_file": False,
@@ -532,38 +522,9 @@ Citizen's Question:
                 "extracted_issue_draft": None
             }
 
-        # 4. Department guidelines & municipal services FAQs
-        if any(w in q_lower for w in ["water", "sewage", "sewer"]):
-            return {
-                "reply": "For Water & Sanitation issues (leakages, pipe damage, sewage overflow), our municipal teams operate 24/7. High priority issues have a 12-hour resolution SLA. You can report an issue directly here or through the Grievance filing page.",
-                "can_auto_file": False,
-                "extracted_issue_draft": None
-            }
-
-        if any(w in q_lower for w in ["electricity", "power", "light", "wire"]):
-            return {
-                "reply": "For Electricity & Power grievances (sparking wires, transformer faults, street lighting outages), emergency repairs are triaged with a 6-hour SLA deadline. Please maintain safe distance from live wires.",
-                "can_auto_file": False,
-                "extracted_issue_draft": None
-            }
-
-        if any(w in q_lower for w in ["sla", "deadline", "timeline", "resolution time"]):
-            return {
-                "reply": "Municipal SLA Resolution Timelines:\n• Electricity & Power: High (6h), Medium (18h), Low (36h)\n• Water & Sanitation: High (12h), Medium (24h), Low (48h)\n• Roads & Infrastructure: High (24h), Medium (48h), Low (72h)\n• Waste Management: High (12h), Medium (24h), Low (48h)",
-                "can_auto_file": False,
-                "extracted_issue_draft": None
-            }
-
-        if any(w in q_lower for w in ["emergency", "helpline", "contact", "number", "ambulance", "police", "fire"]):
-            return {
-                "reply": "Municipal Emergency Helplines:\n• General Control Room: 1913\n• Fire & Rescue: 101\n• Police Control: 100\n• Water Supply Emergency: 1916\n• Electricity Emergency: 1912",
-                "can_auto_file": False,
-                "extracted_issue_draft": None
-            }
-
-        # 5. General municipal assistant greeting / info
+        # 4. General municipal assistant greeting / info
         return {
-            "reply": "Hello! I am your AI Citizen Copilot. I can assist you with:\n1. Filing municipal complaints (Water, Electricity, Roads, Waste Management).\n2. Tracking real-time status and officer updates of your grievances.\n3. SLA deadlines, department guidelines, and emergency contacts.\n\nHow may I help you today?",
+            "reply": "Hello! I am your AI Citizen Copilot. I can assist you with:\n1. Filing municipal complaints (Water, Electricity, Roads, Waste Management).\n2. Tracking the real-time status and officer updates of your grievances.\n3. Answering questions about municipal services and credibility ratings.\n\nHow may I help you today?",
             "can_auto_file": False,
             "extracted_issue_draft": None
         }

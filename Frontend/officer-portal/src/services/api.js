@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://hexaware-mavericks.onrender.com';
+// In development, Vite proxies /officer/* and /citizen/* → http://localhost:8000
+// Use empty base URL (relative) so all requests go through the proxy.
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
   constructor() {
@@ -67,7 +69,7 @@ class ApiClient {
   async registerOfficer(data) { 
     // Send WebSocket broadcast to live Admin Portals
     try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://hexaware-mavericks.onrender.com/ws/admin';
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/admin';
       const ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         ws.send(JSON.stringify({

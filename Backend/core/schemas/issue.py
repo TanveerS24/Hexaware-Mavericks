@@ -82,7 +82,7 @@ class IssueResponse(BaseModel):
     location_lat: Optional[float] = None
     location_lng: Optional[float] = None
     ward: Optional[str] = None
-    source: Optional[str] = "manual"
+    source: str
     transcript: str
     audio_url: Optional[str] = None
     ai_summary: Optional[str] = None

@@ -211,7 +211,7 @@ class AuthService:
         }
         # Replace if email already in memory or prepend
         global IN_MEMORY_OFFICERS
-        IN_MEMORY_OFFICERS = [o for o in IN_MEMORY_OFFICERS if str(o.get("email", "")).lower() != user.email.lower()]
+        IN_MEMORY_OFFICERS = [o for o in IN_MEMORY_OFFICERS if o["email"].lower() != user.email.lower()]
         IN_MEMORY_OFFICERS.insert(0, officer_dict)
 
         try:
@@ -333,6 +333,8 @@ class AuthService:
         if not user:
             raise NotFoundError(f"Officer with ID {user_id} not found")
 
+        return user
+
         # Notify the officer
         try:
             await NotificationService.create_notification(
@@ -394,7 +396,7 @@ class AuthService:
             # Try in-memory registered officers
             email_lower = data.email.lower().strip()
             for off in IN_MEMORY_OFFICERS:
-                if str(off.get("email", "")).lower() == email_lower:
+                if off["email"].lower() == email_lower:
                     user = User(
                         id=off["id"],
                         name=off["name"],

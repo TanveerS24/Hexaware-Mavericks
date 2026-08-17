@@ -8,20 +8,19 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/officer': {
-        target: 'https://hexaware-mavericks.onrender.com',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/citizen': {
-        target: 'https://hexaware-mavericks.onrender.com',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/ws': {
-        target: 'wss://hexaware-mavericks.onrender.com',
+        target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
-        secure: false,
       },
     }
   }
