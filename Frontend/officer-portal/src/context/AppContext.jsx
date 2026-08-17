@@ -1,44 +1,43 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { io } from 'socket.io-client';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api';
 
 const AppContext = createContext(null);
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
-
 export const AppProvider = ({ children }) => {
+  // Initialize user from localStorage FIRST (no async, instant)
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('citizen_ai_user');
     try {
+      const saved = localStorage.getItem('citizen_ai_user');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
   });
   const [token, setToken] = useState(localStorage.getItem('citizen_ai_token'));
+  // loading starts FALSE because we already know user state from localStorage
   const [loading, setLoading] = useState(false);
-  const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
+  const socketRef = useRef(null);
 
-  // Verify session in background without forcing abrupt logouts
+  // Background session refresh — does NOT change routing
   useEffect(() => {
-    if (token) {
-      api.getMe()
-        .then(({ user: u }) => {
-          if (u) {
-            setUser(u);
-            localStorage.setItem('citizen_ai_user', JSON.stringify(u));
-          }
-        })
-        .catch((err) => {
-          console.warn('Background session sync:', err?.message);
-        });
-    }
+    if (!token) return;
+    api.getMe()
+      .then(({ user: u }) => {
+        if (u) {
+          setUser(u);
+          localStorage.setItem('citizen_ai_user', JSON.stringify(u));
+        }
+      })
+      .catch((err) => {
+        // Silent fail — do NOT logout, just keep localStorage session
+        console.warn('[Officer] Background session sync failed (non-critical):', err?.message);
+      });
   }, [token]);
 
-  // Listen for real-time approval/rejection from Admin Portal via BroadcastChannel
+  // Real-time cross-portal sync via BroadcastChannel
   useEffect(() => {
     let channel = null;
     try {
@@ -60,80 +59,92 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
-  // Setup Socket.IO when user is available
+  // Socket.IO — attempt connection but do NOT block UI if it fails
   useEffect(() => {
     if (!user) return;
 
-    const newSocket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    let socket = null;
+    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://hexaware-mavericks.onrender.com';
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      if (user.officer_profile?.department_id) {
-        newSocket.emit('join_department', user.officer_profile.department_id);
+    const connectSocket = async () => {
+      try {
+        const { io } = await import('socket.io-client');
+        socket = io(SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 3,
+          reconnectionDelay: 2000,
+          timeout: 8000,
+        });
+
+        socket.on('connect', () => {
+          setIsConnected(true);
+          if (user.officer_profile?.department_id) {
+            socket.emit('join_department', user.officer_profile.department_id);
+          }
+          if (user.id) socket.emit('join_user', user.id);
+        });
+
+        socket.on('disconnect', () => setIsConnected(false));
+
+        socket.on('new_complaint', (data) => {
+          setNotifications(prev => [data, ...prev]);
+          setUnreadCount(c => c + 1);
+          window.dispatchEvent(new CustomEvent('new_complaint_received', { detail: data }));
+        });
+
+        socket.on('complaint_updated', (data) => {
+          window.dispatchEvent(new CustomEvent('complaint_update', { detail: data }));
+        });
+
+        socket.on('complaint_status_changed', (data) => {
+          window.dispatchEvent(new CustomEvent('complaint_status_changed', { detail: data }));
+        });
+
+        socket.on('emergency_alert', (data) => {
+          window.dispatchEvent(new CustomEvent('emergency_alert', { detail: data }));
+        });
+
+        socket.on('account_approved', () => {
+          window.dispatchEvent(new CustomEvent('account_approved'));
+        });
+
+        socketRef.current = socket;
+      } catch (err) {
+        console.warn('[Officer] Socket.IO connection skipped:', err.message);
       }
-      if (user.id) {
-        newSocket.emit('join_user', user.id);
-      }
-    });
+    };
 
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    newSocket.on('new_complaint', (data) => {
-      setNotifications(prev => [data, ...prev]);
-      setUnreadCount(c => c + 1);
-      window.dispatchEvent(new CustomEvent('new_complaint_received', { detail: data }));
-    });
-
-    newSocket.on('complaint_updated', (data) => {
-      window.dispatchEvent(new CustomEvent('complaint_update', { detail: data }));
-    });
-
-    newSocket.on('complaint_status_changed', (data) => {
-      window.dispatchEvent(new CustomEvent('complaint_status_changed', { detail: data }));
-    });
-
-    newSocket.on('emergency_alert', (data) => {
-      window.dispatchEvent(new CustomEvent('emergency_alert', { detail: data }));
-    });
-
-    newSocket.on('account_approved', () => {
-      window.dispatchEvent(new CustomEvent('account_approved'));
-    });
-
-    setSocket(newSocket);
+    connectSocket();
 
     return () => {
-      newSocket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [user?.id]);
 
   // Load notifications
   useEffect(() => {
-    if (user) {
-      loadNotifications();
-    }
-  }, [user]);
+    if (user) loadNotifications();
+  }, [user?.id]);
 
   const loadNotifications = useCallback(async () => {
     try {
-      const { notifications: notifs } = await api.getNotifications();
-      setNotifications(notifs || []);
-      setUnreadCount((notifs || []).filter(n => !n.is_read).length);
-    } catch (err) {
-      console.error('Failed to load notifications:', err);
+      const res = await api.getNotifications();
+      const notifs = res?.notifications || [];
+      setNotifications(notifs);
+      setUnreadCount(notifs.filter(n => !n.is_read).length);
+    } catch {
+      // Silently ignore — notifications are non-critical
     }
   }, []);
 
   const login = useCallback(async (credentials) => {
     const result = await api.loginUser(credentials);
     const { user: u, token: t } = result;
+    if (!u || !t) throw new Error('Invalid login response from server');
     localStorage.setItem('citizen_ai_token', t);
     localStorage.setItem('citizen_ai_user', JSON.stringify(u));
     setToken(t);
@@ -146,6 +157,9 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('citizen_ai_user');
     setToken(null);
     setUser(null);
+    setNotifications([]);
+    setUnreadCount(0);
+    setIsConnected(false);
   }, []);
 
   const markNotificationAsRead = useCallback(async (id) => {
@@ -153,9 +167,7 @@ export const AppProvider = ({ children }) => {
       await api.markNotificationRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(c => Math.max(0, c - 1));
-    } catch (err) {
-      console.error('Failed to mark notification read:', err);
-    }
+    } catch { /* silent */ }
   }, []);
 
   const markAllNotificationsAsRead = useCallback(async () => {
@@ -163,9 +175,7 @@ export const AppProvider = ({ children }) => {
       await api.markAllRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
-    } catch (err) {
-      console.error('Failed to mark all read:', err);
-    }
+    } catch { /* silent */ }
   }, []);
 
   return (
@@ -173,7 +183,7 @@ export const AppProvider = ({ children }) => {
       user,
       token,
       loading,
-      socket,
+      socket: socketRef.current,
       isConnected,
       notifications,
       unreadCount,

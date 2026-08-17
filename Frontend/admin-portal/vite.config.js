@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
+const TARGET = process.env.VITE_PROXY_TARGET || 'https://hexaware-mavericks.onrender.com';
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -9,14 +10,19 @@ export default defineConfig({
     host: true,
     proxy: {
       '/admin': {
-        target: 'http://localhost:8000',
+        target: TARGET,
         changeOrigin: true,
         secure: false,
       },
-      '/ws': {
-        target: 'ws://localhost:8000',
-        ws: true,
+      '/officer': {
+        target: TARGET,
         changeOrigin: true,
+        secure: false,
+      },
+      '/citizen': {
+        target: TARGET,
+        changeOrigin: true,
+        secure: false,
       },
     }
   }

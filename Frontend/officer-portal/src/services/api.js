@@ -1,9 +1,13 @@
-// Universal Officer API Client with auto-failover and loop-prevention
+// CitizenAI Officer Portal API Client
+// Multi-tier failover: Render Production → localhost:8000 (FastAPI) → localStorage fallback
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
   constructor() {
     this.baseUrl = API_BASE.replace(/\/$/, '');
+    // Production Render URL for direct requests
+    this.renderUrl = 'https://hexaware-mavericks.onrender.com';
   }
 
   getToken() {
@@ -24,34 +28,19 @@ class ApiClient {
       method,
       headers: this.getHeaders(isMultipart),
     };
+    if (data) options.body = isMultipart ? data : JSON.stringify(data);
 
-    if (data) {
-      options.body = isMultipart ? data : JSON.stringify(data);
-    }
-
-    let response;
-    try {
-      response = await fetch(url, options);
-    } catch (netErr) {
-      // Primary network error -> try local backend
-      try {
-        response = await fetch(`http://localhost:5000/api${endpoint.replace(/^\/officer/, '')}`, options);
-      } catch {
-        throw new Error('Network connection error. Please verify backend connectivity.');
-      }
-    }
+    const response = await fetch(url, options);
 
     if (response.status === 401) {
       throw new Error('Unauthorized or session expired.');
     }
 
     const result = await response.json().catch(() => ({ error: 'Invalid response format' }));
-
     if (!response.ok) {
       const errorMsg = result.detail || result.error || result.message || `HTTP ${response.status}`;
       throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
     }
-
     return result;
   }
 
@@ -61,193 +50,279 @@ class ApiClient {
   put(endpoint, data) { return this.request('PUT', endpoint, data); }
   delete(endpoint) { return this.request('DELETE', endpoint); }
 
-  // 1. Bulletproof Officer Authentication
+  // ─────────────────────────────────────────────────────
+  // 1. OFFICER LOGIN — 4-strategy failover
+  // ─────────────────────────────────────────────────────
   async loginUser(credentials) {
     const emailLower = (credentials.email || '').toLowerCase().trim();
     const pwd = credentials.password || '';
 
-    // First attempt: Local Node Backend /api/auth/login
+    const buildUser = (data, email) => {
+      // Normalize TokenResponse from FastAPI backend
+      if (data.access_token) {
+        return {
+          token: data.access_token,
+          user: data.user || {
+            id: data.user_id || 'officer-1',
+            name: data.name || email.split('@')[0],
+            email,
+            role: data.role || 'officer',
+            officer_profile: {
+              department: data.department_name || 'Water & Sewerage',
+              department_id: data.department_id || 1,
+              region: 'Mumbai Central',
+              designation: data.designation || 'Field Grievance Officer',
+              employee_id: data.employee_id || `GOV-2026-OFF-${data.user_id || '001'}`,
+            }
+          }
+        };
+      }
+      // Node.js backend format
+      if (data.token && data.user) {
+        return { token: data.token, user: data.user };
+      }
+      return null;
+    };
+
+    // Strategy 1: Render production FastAPI
     try {
-      const localRes = await fetch('http://localhost:5000/api/auth/login', {
+      const res = await fetch(`${this.renderUrl}/officer/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailLower, password: pwd })
       });
-      const localData = await localRes.json();
-      if (localRes.ok && localData.user && localData.user.role === 'officer') {
-        const token = localData.token || 'officer_jwt_token';
-        localStorage.setItem('citizen_ai_token', token);
-        localStorage.setItem('citizen_ai_user', JSON.stringify(localData.user));
-        return { user: localData.user, token };
-      }
-    } catch {
-      // Fall through to next strategy
-    }
-
-    // Second attempt: FastAPI Gateway /officer/auth/login
-    try {
-      const res = await this.post('/officer/auth/login', credentials);
-      const token = res.access_token || res.token || 'officer_jwt_token';
-      const user = res.user || {
-        id: res.user_id || 'officer-1',
-        name: res.name || emailLower.split('@')[0],
-        email: emailLower,
-        role: 'officer',
-        officer_profile: {
-          department: res.department || 'Water & Sewerage',
-          region: res.region || 'Mumbai',
-          designation: res.designation || 'Field Grievance Officer',
+      if (res.ok) {
+        const data = await res.json();
+        const result = buildUser(data, emailLower);
+        if (result) {
+          localStorage.setItem('citizen_ai_token', result.token);
+          localStorage.setItem('citizen_ai_user', JSON.stringify(result.user));
+          return result;
         }
-      };
-      localStorage.setItem('citizen_ai_token', token);
-      localStorage.setItem('citizen_ai_user', JSON.stringify(user));
-      return { user, token };
-    } catch (gatewayErr) {
-      console.warn('Gateway login failed:', gatewayErr.message);
-    }
+      }
+    } catch { /* fall through */ }
 
-    // Third attempt: Active Field Officer Fallback
-    if (
-      emailLower.includes('ranj') || 
-      emailLower.includes('officer') || 
-      emailLower.includes('sharma') || 
-      emailLower.includes('water') || 
-      emailLower.includes('power')
-    ) {
+    // Strategy 2: Local FastAPI gateway (http://localhost:8000)
+    try {
+      const res = await fetch('http://localhost:8000/officer/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLower, password: pwd })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const result = buildUser(data, emailLower);
+        if (result) {
+          localStorage.setItem('citizen_ai_token', result.token);
+          localStorage.setItem('citizen_ai_user', JSON.stringify(result.user));
+          return result;
+        }
+      }
+    } catch { /* fall through */ }
+
+    // Strategy 3: Local Node.js backend (http://localhost:5000)
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLower, password: pwd })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user?.role === 'officer' && data.token) {
+          localStorage.setItem('citizen_ai_token', data.token);
+          localStorage.setItem('citizen_ai_user', JSON.stringify(data.user));
+          return { token: data.token, user: data.user };
+        }
+      }
+    } catch { /* fall through */ }
+
+    // Strategy 4: Known seeded officer accounts fallback
+    const knownOfficers = {
+      'officer.water@city.gov': { name: 'Officer Priya Sharma', dept: 'Water & Sewerage', deptId: 1 },
+      'officer.power@city.gov': { name: 'Officer David Miller', dept: 'Electricity & Power', deptId: 2 },
+      'officer@citizenai.gov.in': { name: 'Officer Rajesh Sharma', dept: 'Water & Sewerage', deptId: 1 },
+      'officer.electricity@citizenai.gov.in': { name: 'Officer Priya Kumar', dept: 'Electricity & Power', deptId: 2 },
+      'ranjith18@gmail.com': { name: 'Officer Ranjith Kumar', dept: 'Water & Sewerage', deptId: 1 },
+      'kurubaranjith18@gmail.com': { name: 'Officer Ranjith Kumar', dept: 'Water & Sewerage', deptId: 1 },
+    };
+
+    const knownMatch = knownOfficers[emailLower];
+    if (knownMatch && pwd === 'Officer@123') {
       const officerUser = {
-        id: 'officer-active-1',
-        name: emailLower.includes('ranj') ? 'Officer Ranjith' : 'Officer Rajesh Sharma',
+        id: `officer-${Math.random().toString(36).substr(2, 9)}`,
+        name: knownMatch.name,
         email: emailLower,
         role: 'officer',
         officer_profile: {
-          department: emailLower.includes('power') || emailLower.includes('elec') ? 'Electricity & Power' : 'Water & Sewerage',
+          department: knownMatch.dept,
+          department_id: knownMatch.deptId,
           region: 'Mumbai Central',
           designation: 'Field Grievance Officer',
-          employee_id: 'GOV-2026-OFF-976497'
+          employee_id: `GOV-2026-OFF-${Math.floor(Math.random() * 999999)}`
         }
       };
-      const token = 'mock_jwt_officer_token_' + Date.now();
+      const token = `officer_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('citizen_ai_token', token);
       localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
       return { user: officerUser, token };
     }
 
-    throw new Error('Invalid email or password. Please check your credentials.');
+    throw new Error('Invalid credentials. Please check your email and password.');
   }
 
-  async registerOfficer(data) { 
-    return await this.post('/officer/auth/register', data).catch(() => this.post('/auth/register/officer', data));
-  }
-
-  async getMe() { 
+  async registerOfficer(data) {
+    // Try production first, fallback to local
     try {
-      const res = await this.get('/officer/me');
-      return { user: res.user || res };
+      return await fetch(`${this.renderUrl}/officer/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(r => r.json());
     } catch {
-      return this.get('/auth/me').catch(() => {
-        const saved = localStorage.getItem('citizen_ai_user');
-        if (saved) return { user: JSON.parse(saved) };
-        throw new Error('No active user session');
-      });
+      return this.post('/officer/auth/register', data);
     }
   }
 
-  // 2. Officer Queue & Complaints
+  async getMe() {
+    // Try production
+    try {
+      const res = await fetch(`${this.renderUrl}/officer/me`, { headers: this.getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        return { user: data.user || data };
+      }
+    } catch { /* fall through */ }
+
+    // Fallback to localStorage
+    const saved = localStorage.getItem('citizen_ai_user');
+    if (saved) return { user: JSON.parse(saved) };
+    throw new Error('No active officer session');
+  }
+
+  // ─────────────────────────────────────────────────────
+  // 2. COMPLAINTS / QUEUE
+  // ─────────────────────────────────────────────────────
   async getComplaints(params = {}) {
     const query = new URLSearchParams(params).toString();
+    const normalize = (res) => {
+      const list = res.items || res.complaints || (Array.isArray(res) ? res : []);
+      return {
+        complaints: list.map(item => ({
+          id: item.id || item.issue_id,
+          title: item.title || item.subject || 'Untitled Complaint',
+          description: item.description || item.summary || '',
+          department: item.department_name || item.department || 'General',
+          region: item.ward || item.region || 'City',
+          priority: (item.priority || 'normal').toLowerCase(),
+          status: (item.status || 'pending').toLowerCase(),
+          is_emergency: item.priority === 'emergency' || item.priority === 'high' || item.is_emergency,
+          ai_summary: item.ai_summary || item.summary || item.description,
+          sla_deadline: item.sla_deadline || item.target_resolution_at,
+          created_at: item.created_at,
+          citizen: item.citizen || { name: item.citizen_name || 'Citizen', email: item.citizen_email || '' },
+        })),
+        total: res.total || list.length
+      };
+    };
+
+    try {
+      const res = await fetch(`${this.renderUrl}/officer/queue?${query}`, { headers: this.getHeaders() });
+      if (res.ok) return normalize(await res.json());
+    } catch { /* fall through */ }
+
     try {
       const res = await this.get(`/officer/queue?${query}`);
-      const list = res.items || res.complaints || res;
-      const normalized = Array.isArray(list) ? list.map(item => ({
-        id: item.id || item.issue_id,
-        title: item.title,
-        description: item.description,
-        department: item.department || item.department_name || 'Water & Sewerage',
-        region: item.ward || item.region || 'Mumbai',
-        priority: (item.priority || 'normal').toLowerCase(),
-        status: (item.status || 'pending').toLowerCase(),
-        is_emergency: item.priority === 'emergency' || item.priority === 'high' || item.is_emergency,
-        ai_summary: item.ai_summary || item.summary || item.description,
-        sla_deadline: item.sla_deadline || item.target_resolution_at,
-        created_at: item.created_at,
-        citizen: item.citizen || { name: item.citizen_name || 'Citizen' },
-      })) : [];
-      return { complaints: normalized, total: res.total || normalized.length };
-    } catch {
-      try {
-        const localRes = await fetch(`http://localhost:5000/api/complaints?${query}`, {
-          headers: this.getHeaders()
-        });
-        const localData = await localRes.json();
-        return localData;
-      } catch {
-        return { complaints: [], total: 0 };
+      return normalize(res);
+    } catch { /* fall through */ }
+
+    return { complaints: [], total: 0 };
+  }
+
+  async getComplaint(id) {
+    try {
+      const res = await fetch(`${this.renderUrl}/officer/issues/${id}`, { headers: this.getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        return { complaint: data.issue || data };
       }
-    }
+    } catch { /* fall through */ }
+    return this.get(`/officer/issues/${id}`).catch(() => ({ complaint: null }));
   }
 
-  // 3. Issue Detail
-  async getComplaint(id) { 
+  async assignComplaint(id, data) {
     try {
-      const res = await this.get(`/officer/issues/${id}`);
-      const c = res.issue || res;
-      return {
-        complaint: {
-          id: c.id,
-          title: c.title,
-          description: c.description,
-          department: c.department || c.department_name || 'Water & Sewerage',
-          region: c.ward || c.region || 'Mumbai',
-          priority: (c.priority || 'normal').toLowerCase(),
-          status: (c.status || 'pending').toLowerCase(),
-          is_emergency: c.priority === 'emergency' || c.priority === 'high',
-          ai_summary: c.ai_summary || c.description,
-          sla_deadline: c.sla_deadline || c.target_resolution_at,
-          created_at: c.created_at,
-          citizen: c.citizen || { name: c.citizen_name || 'Citizen' },
-          timeline: c.timeline || [],
-        }
-      };
-    } catch {
-      return this.get(`/complaints/${id}`);
-    }
-  }
-
-  // 4. Claim / Assign Complaint
-  async assignComplaint(id, data) { 
-    try {
-      return await this.patch(`/officer/issues/${id}/claim`, { notes: data.notes || '', version: data.version || 1 });
-    } catch {
-      return await this.post(`/complaints/${id}/assign`, data);
-    }
-  }
-
-  // 5. Update Status
-  async updateComplaint(id, data) { 
-    try {
-      return await this.patch(`/officer/issues/${id}/status`, { 
-        status: data.new_status || 'in_progress', 
-        action_taken: data.update_text || '',
-        resolution_notes: data.update_text || '',
-        version: data.version || 1
+      const res = await fetch(`${this.renderUrl}/officer/issues/${id}/claim`, {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ notes: data.notes || '', version: data.version || 1 })
       });
-    } catch {
-      return await this.post(`/complaints/${id}/update`, data);
-    }
+      if (res.ok) return res.json();
+    } catch { /* fall through */ }
+    return this.patch(`/officer/issues/${id}/claim`, data);
   }
 
-  // 6. Mark Malicious
+  async updateComplaint(id, data) {
+    const payload = {
+      status: data.new_status || 'in_progress',
+      action_taken: data.update_text || '',
+      resolution_notes: data.update_text || '',
+      version: data.version || 1
+    };
+    try {
+      const res = await fetch(`${this.renderUrl}/officer/issues/${id}/status`, {
+        method: 'PATCH',
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return res.json();
+    } catch { /* fall through */ }
+    return this.patch(`/officer/issues/${id}/status`, payload);
+  }
+
   markMalicious(id, data) {
-    return this.patch(`/officer/issues/${id}/mark-malicious`, data);
+    return fetch(`${this.renderUrl}/officer/issues/${id}/mark-malicious`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data)
+    }).then(r => r.json()).catch(() => this.patch(`/officer/issues/${id}/mark-malicious`, data));
   }
 
-  // 7. Notifications
-  getNotifications() { return this.get('/officer/notifications').catch(() => this.get('/notifications')).catch(() => ({ notifications: [] })); }
-  markNotificationRead(id) { return this.patch(`/notifications/${id}/read`).catch(() => {}); }
-  markAllRead() { return this.patch('/notifications/read-all').catch(() => {}); }
+  // ─────────────────────────────────────────────────────
+  // 3. NOTIFICATIONS
+  // ─────────────────────────────────────────────────────
+  getNotifications() {
+    return fetch(`${this.renderUrl}/officer/notifications`, { headers: this.getHeaders() })
+      .then(r => r.ok ? r.json() : { notifications: [] })
+      .catch(() => ({ notifications: [] }));
+  }
 
-  // 8. Chatbot
-  chatbot(message) { return this.post('/citizen/chatbot', { message }).catch(() => this.post('/chatbot', { message })); }
+  markNotificationRead(id) {
+    return fetch(`${this.renderUrl}/notifications/${id}/read`, {
+      method: 'PATCH', headers: this.getHeaders()
+    }).catch(() => {});
+  }
+
+  markAllRead() {
+    return fetch(`${this.renderUrl}/notifications/read-all`, {
+      method: 'PATCH', headers: this.getHeaders()
+    }).catch(() => {});
+  }
+
+  // ─────────────────────────────────────────────────────
+  // 4. CHATBOT
+  // ─────────────────────────────────────────────────────
+  async chatbot(message) {
+    try {
+      const res = await fetch(`${this.renderUrl}/citizen/chatbot`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ message })
+      });
+      if (res.ok) return res.json();
+    } catch { /* fall through */ }
+    return this.post('/citizen/chatbot', { message });
+  }
 }
 
 export const api = new ApiClient();
