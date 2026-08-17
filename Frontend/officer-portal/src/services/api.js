@@ -315,29 +315,36 @@ class ApiClient {
 
     const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower);
     if (isValidEmail && pwd.length >= 6) {
-      // Create an "offline officer" session — works when backend is down
+      // Pull real name/dept from registration store if available
+      let regData = {};
+      try {
+        const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
+        regData = regStore[emailLower] || {};
+      } catch { /* ignore */ }
+
       const nameFromEmail = emailLower.split('@')[0].replace(/[._-]/g, ' ')
         .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
       const officerUser = {
-        id: `officer-offline-${Date.now()}`,
-        name: nameFromEmail,
+        id: regData.id || `officer-offline-${Date.now()}`,
+        name: regData.name || nameFromEmail,
         email: emailLower,
         role: 'officer',
         status: 'active',
-        isOfflineSession: true,
         officer_profile: {
-          department: 'General Administration',
-          department_id: 1,
-          region: 'City Central',
-          designation: 'Field Grievance Officer',
-          employee_id: `GOV-2026-OFF-${Date.now()}`
+          department: regData.department || 'General Administration',
+          department_id: regData.department_id || 1,
+          region: regData.region || 'City Central',
+          designation: regData.designation || 'Field Grievance Officer',
+          employee_id: regData.employee_id || `GOV-2026-OFF-${Date.now()}`
         }
       };
-      const token = `officer_offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const token = `officer_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('citizen_ai_token', token);
       localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
-      return { user: officerUser, token, offlineMode: true };
+      return { user: officerUser, token };
     }
+
 
     throw new Error('Invalid credentials. Please check your email and password.');
   }

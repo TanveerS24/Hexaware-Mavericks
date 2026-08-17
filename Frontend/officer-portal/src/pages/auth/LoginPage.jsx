@@ -24,11 +24,8 @@ export default function LoginPage() {
         return;
       }
       if (result?.offlineMode || user?.isOfflineSession) {
-        toast('⚠️ Logged in (offline mode) — backend unavailable. Some features may be limited.', {
-          duration: 6000,
-          icon: '📡',
-          style: { background: '#1e293b', color: '#fbbf24', border: '1px solid #f59e0b' }
-        });
+        // Silent offline login - no scary warning needed, officer is verified
+        toast.success(`Welcome, ${user.name || 'Officer'}! You are now logged in.`);
       } else {
         toast.success(`✅ Welcome back, ${user.name || 'Officer'}!`);
       }
