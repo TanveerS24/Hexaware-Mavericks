@@ -23,7 +23,9 @@ const Login = () => {
 
       if (response.data.access_token) {
         localStorage.setItem('access_token', response.data.access_token);
-        // Dispatch event or just reload/navigate
+        if (response.data.refresh_token) {
+          localStorage.setItem('refresh_token', response.data.refresh_token);
+        }
         window.location.href = '/dashboard';
       }
     } catch (err) {

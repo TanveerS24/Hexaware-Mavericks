@@ -170,7 +170,7 @@ Response:"""
 
                 # 1. Anthropic Claude API
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {
                         "x-api-key": ai_api_key,
@@ -207,7 +207,7 @@ Response:"""
 
                 # 2. Google Gemini API
                 elif provider == "gemini" or "gemini" in ai_model.lower():
-                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
                     models_to_try = [ai_model, "gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
                     
                     for model in models_to_try:
@@ -247,7 +247,7 @@ Response:"""
 
                 # 3. OpenAI or OpenAI-compatible API
                 else:
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
                         "Authorization": f"Bearer {ai_api_key}",
@@ -310,7 +310,7 @@ Response:"""
 
                 # 1. Anthropic
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {"x-api-key": ai_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
                     payload = {
@@ -327,7 +327,7 @@ Response:"""
 
                 # 2. Google Gemini
                 elif provider == "gemini" or "gemini" in ai_model.lower():
-                    base_url = getattr(settings, "AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
                     model_name = ai_model if "models/" in ai_model else f"models/{ai_model}"
                     url = f"{base_url}/{model_name}:generateContent?key={ai_api_key}"
                     payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1}}
@@ -339,7 +339,7 @@ Response:"""
 
                 # 3. OpenAI or Grok
                 else:
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {"Authorization": f"Bearer {ai_api_key}", "Content-Type": "application/json"}
                     payload = {
@@ -398,7 +398,7 @@ Citizen's Question:
 
                 # 1. Anthropic Claude API
                 if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.anthropic.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
                     url = f"{base_url}/messages"
                     headers = {
                         "x-api-key": ai_api_key,
@@ -430,7 +430,7 @@ Citizen's Question:
 
                 # 3. OpenAI / Grok compatible
                 else:
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
                         "Authorization": f"Bearer {ai_api_key}",
@@ -451,10 +451,53 @@ Citizen's Question:
                         return json.loads(raw_json)
                     
         except Exception as e:
-            logger.warning(f"Chatbot API request failed ({str(e)}).")
+            logger.warning(f"Chatbot API request failed ({str(e)}). Using smart fallback.")
 
+        # Intelligent Fallback Redirection & Triage when Cloud LLM is offline or has 0 credits
+        q_lower = user_query.lower().strip()
+
+        # 1. Check if citizen is reporting an issue
+        is_reporting = any(w in q_lower for w in ["report", "leak", "power", "outage", "pothole", "garbage", "waste", "drain", "water", "electricity", "street", "pipe", "sewage", "bill", "broken", "issue", "complaint", "repair"])
+        
+        if is_reporting:
+            heuristic = cls._heuristic_classify(user_query)
+            cat = heuristic.get("category", "General")
+            prio = heuristic.get("priority", "medium")
+            summ = heuristic.get("summary", user_query)
+            return {
+                "reply": f"I've extracted your grievance details for {cat.title()}. You can review the draft below and submit it directly to the department.",
+                "can_auto_file": True,
+                "extracted_issue_draft": {
+                    "transcript": user_query,
+                    "summary": summ,
+                    "category": cat,
+                    "priority": prio
+                }
+            }
+
+        # 2. Check if citizen is asking about complaint status
+        if any(w in q_lower for w in ["status", "track", "my complaint", "check", "updates", "progress"]):
+            if "no active or past complaints" in context_data.lower():
+                reply_text = "You currently do not have any active or past complaints registered in your account. If you are experiencing a civic issue, please let me know or use the Report section."
+            else:
+                reply_text = f"Here is the summary of your registered grievances:\n\n{context_data}\n\nOur field officers are actively working on resolving high-priority issues."
+            return {
+                "reply": reply_text,
+                "can_auto_file": False,
+                "extracted_issue_draft": None
+            }
+
+        # 3. Check if asking about credibility score
+        if "credibility" in q_lower or "score" in q_lower:
+            return {
+                "reply": "Your Credibility Score is a measure of your account's reporting integrity. Standard citizen accounts start at 1.0 (100%). Submitting genuine and verified grievances maintains a high score, ensuring faster triage and prompt officer response.",
+                "can_auto_file": False,
+                "extracted_issue_draft": None
+            }
+
+        # 4. General municipal assistant greeting / info
         return {
-            "reply": "I apologize, but I am currently unable to process your request. Please try again later.",
+            "reply": "Hello! I am your AI Citizen Copilot. I can assist you with:\n1. Filing municipal complaints (Water, Electricity, Roads, Waste Management).\n2. Tracking the real-time status and officer updates of your grievances.\n3. Answering questions about municipal services and credibility ratings.\n\nHow may I help you today?",
             "can_auto_file": False,
             "extracted_issue_draft": None
         }
