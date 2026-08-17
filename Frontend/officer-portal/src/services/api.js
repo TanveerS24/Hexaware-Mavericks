@@ -1,4 +1,4 @@
-// Universal Officer API Client with auto-failover and robust authentication
+// Universal Officer API Client with auto-failover and loop-prevention
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
@@ -42,11 +42,7 @@ class ApiClient {
     }
 
     if (response.status === 401) {
-      localStorage.removeItem('citizen_ai_token');
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-      throw new Error('Invalid credentials or session expired.');
+      throw new Error('Unauthorized or session expired.');
     }
 
     const result = await response.json().catch(() => ({ error: 'Invalid response format' }));
@@ -81,10 +77,11 @@ class ApiClient {
       if (localRes.ok && localData.user && localData.user.role === 'officer') {
         const token = localData.token || 'officer_jwt_token';
         localStorage.setItem('citizen_ai_token', token);
+        localStorage.setItem('citizen_ai_user', JSON.stringify(localData.user));
         return { user: localData.user, token };
       }
     } catch {
-      // Continue to next auth strategy
+      // Fall through to next strategy
     }
 
     // Second attempt: FastAPI Gateway /officer/auth/login
@@ -103,6 +100,7 @@ class ApiClient {
         }
       };
       localStorage.setItem('citizen_ai_token', token);
+      localStorage.setItem('citizen_ai_user', JSON.stringify(user));
       return { user, token };
     } catch (gatewayErr) {
       console.warn('Gateway login failed:', gatewayErr.message);
@@ -130,6 +128,7 @@ class ApiClient {
       };
       const token = 'mock_jwt_officer_token_' + Date.now();
       localStorage.setItem('citizen_ai_token', token);
+      localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
       return { user: officerUser, token };
     }
 
@@ -145,7 +144,11 @@ class ApiClient {
       const res = await this.get('/officer/me');
       return { user: res.user || res };
     } catch {
-      return this.get('/auth/me');
+      return this.get('/auth/me').catch(() => {
+        const saved = localStorage.getItem('citizen_ai_user');
+        if (saved) return { user: JSON.parse(saved) };
+        throw new Error('No active user session');
+      });
     }
   }
 
@@ -171,7 +174,15 @@ class ApiClient {
       })) : [];
       return { complaints: normalized, total: res.total || normalized.length };
     } catch {
-      return this.get(`/complaints?${query}`).catch(() => ({ complaints: [], total: 0 }));
+      try {
+        const localRes = await fetch(`http://localhost:5000/api/complaints?${query}`, {
+          headers: this.getHeaders()
+        });
+        const localData = await localRes.json();
+        return localData;
+      } catch {
+        return { complaints: [], total: 0 };
+      }
     }
   }
 
@@ -231,9 +242,9 @@ class ApiClient {
   }
 
   // 7. Notifications
-  getNotifications() { return this.get('/officer/notifications').catch(() => this.get('/notifications')); }
-  markNotificationRead(id) { return this.patch(`/notifications/${id}/read`); }
-  markAllRead() { return this.patch('/notifications/read-all'); }
+  getNotifications() { return this.get('/officer/notifications').catch(() => this.get('/notifications')).catch(() => ({ notifications: [] })); }
+  markNotificationRead(id) { return this.patch(`/notifications/${id}/read`).catch(() => {}); }
+  markAllRead() { return this.patch('/notifications/read-all').catch(() => {}); }
 
   // 8. Chatbot
   chatbot(message) { return this.post('/citizen/chatbot', { message }).catch(() => this.post('/chatbot', { message })); }
