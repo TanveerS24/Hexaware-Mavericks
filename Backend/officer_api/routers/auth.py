@@ -7,6 +7,7 @@ from core.db.session import get_db
 from core.exceptions import UnauthorizedError
 from core.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest, OfficerRegisterRequest, UserResponse
 from core.services.auth_service import AuthService
+from core.models.users import UserRole
 from fastapi import status
 
 router = APIRouter(tags=["Officer Authentication"])

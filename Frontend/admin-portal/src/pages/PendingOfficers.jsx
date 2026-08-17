@@ -316,7 +316,7 @@ export const PendingOfficers = () => {
               }}
             >
               <Clock size={14} />
-              <span>Load Pending Verification Queue (Includes Inspector King)</span>
+              <span>Refresh Verification Queue</span>
             </button>
           </div>
         ) : (

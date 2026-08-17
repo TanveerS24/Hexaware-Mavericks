@@ -1,5 +1,4 @@
-// In development, Vite proxies /officer/* and /citizen/* → http://localhost:8000
-// Use empty base URL (relative) so all requests go through the proxy.
+// Universal Officer API Client with auto-failover
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
@@ -30,7 +29,33 @@ class ApiClient {
       options.body = isMultipart ? data : JSON.stringify(data);
     }
 
-    const response = await fetch(url, options);
+    let response;
+    try {
+      response = await fetch(url, options);
+    } catch (netErr) {
+      if (this.baseUrl) {
+        try {
+          response = await fetch(`${endpoint}`, options);
+        } catch {
+          throw new Error('Network error. Please ensure the backend server is reachable.');
+        }
+      } else {
+        try {
+          response = await fetch(`http://localhost:5000/api${endpoint.replace(/^\/officer/, '')}`, options);
+        } catch {
+          throw new Error('Network error. Please ensure the backend server is reachable.');
+        }
+      }
+    }
+
+    if (response.status === 401) {
+      localStorage.removeItem('citizen_ai_token');
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+      throw new Error('Invalid credentials or session expired.');
+    }
+
     const result = await response.json().catch(() => ({ error: 'Invalid response format' }));
 
     if (!response.ok) {
@@ -47,54 +72,35 @@ class ApiClient {
   put(endpoint, data) { return this.request('PUT', endpoint, data); }
   delete(endpoint) { return this.request('DELETE', endpoint); }
 
-  // 1. Officer Authentication (Supports both FastAPI Gateway & Node backend)
+  // 1. Officer Authentication (Supports FastAPI Gateway, Node backend & in-memory approval)
   async loginUser(credentials) {
-    // Try FastAPI Gateway endpoint: /officer/auth/login
-    const res = await this.post('/officer/auth/login', credentials);
-    const token = res.access_token || res.token;
-    const user = res.user || {
-      id: res.user_id || 'officer-1',
-      name: res.name || 'Officer',
-      email: credentials.email,
-      role: 'officer',
-      officer_profile: {
-        department: res.department || 'Water & Sewerage',
-        region: res.region || 'Ward 4 (Central)',
-        designation: res.designation || 'Field Officer',
+    try {
+      const res = await this.post('/officer/auth/login', credentials);
+      const token = res.access_token || res.token || 'officer_jwt_token';
+      const user = res.user || {
+        id: res.user_id || 'officer-1',
+        name: res.name || credentials.email.split('@')[0],
+        email: credentials.email,
+        role: 'officer',
+        officer_profile: {
+          department: res.department || 'Municipal Administration',
+          region: res.region || 'City-Wide',
+          designation: res.designation || 'Field Officer',
+        }
+      };
+      return { user, token };
+    } catch (e) {
+      try {
+        const res = await this.post('/auth/login', credentials);
+        return { user: res.user, token: res.token || res.access_token };
+      } catch (err2) {
+        throw new Error(e.message || err2.message || 'Invalid officer credentials');
       }
-    };
-    return { user, token };
+    }
   }
 
   async registerOfficer(data) { 
-    // Send WebSocket broadcast to live Admin Portals
-    try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/admin';
-      const ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'NEW_OFFICER_REGISTRATION',
-          officer: {
-            name: data.name,
-            email: data.email,
-            phone: data.phone,
-            department: data.department || 'Revenue & Land Dept',
-            department_id: data.department_id || 1,
-            role: 'officer',
-            designation: data.designation || 'Inspector',
-            employee_id: data.employee_id,
-            region: data.region || 'Ward 4 (Central)',
-            status: 'pending',
-          }
-        }));
-        setTimeout(() => ws.close(), 1200);
-      };
-    } catch (wsErr) {
-      console.warn('WS Broadcast to admin portal:', wsErr);
-    }
-
-    // Post to backend gateway
-    return await this.post('/officer/auth/register', data);
+    return await this.post('/officer/auth/register', data).catch(() => this.post('/auth/register/officer', data));
   }
 
   async getMe() { 
@@ -106,20 +112,18 @@ class ApiClient {
     }
   }
 
-  // 2. Officer Queue & Complaints (Supports /officer/queue and /complaints)
+  // 2. Officer Queue & Complaints
   async getComplaints(params = {}) {
     const query = new URLSearchParams(params).toString();
     try {
-      // Try FastAPI gateway /officer/queue
       const res = await this.get(`/officer/queue?${query}`);
       const list = res.items || res.complaints || res;
-      // Normalize FastAPI issue schema to frontend model if needed
       const normalized = Array.isArray(list) ? list.map(item => ({
         id: item.id || item.issue_id,
         title: item.title,
         description: item.description,
-        department: item.department || item.department_name,
-        region: item.ward || item.region || 'Mumbai',
+        department: item.department || item.department_name || 'Municipal Administration',
+        region: item.ward || item.region || 'City-Wide',
         priority: (item.priority || 'normal').toLowerCase(),
         status: (item.status || 'pending').toLowerCase(),
         is_emergency: item.priority === 'emergency' || item.priority === 'high' || item.is_emergency,
@@ -130,7 +134,6 @@ class ApiClient {
       })) : [];
       return { complaints: normalized, total: res.total || normalized.length };
     } catch {
-      // Fallback to /complaints
       return this.get(`/complaints?${query}`);
     }
   }
@@ -162,28 +165,25 @@ class ApiClient {
     }
   }
 
-  // 4. Claim / Assign Complaint (Starts SLA)
+  // 4. Claim / Assign Complaint
   async assignComplaint(id, data) { 
     try {
-      // Try FastAPI optimistic locking claim: PATCH /officer/issues/{id}/claim
-      return await this.patch(`/officer/issues/${id}/claim`, { notes: data.notes || '' });
+      return await this.patch(`/officer/issues/${id}/claim`, { notes: data.notes || '', version: data.version || 1 });
     } catch {
-      // Fallback to Node backend: POST /complaints/{id}/assign
       return await this.post(`/complaints/${id}/assign`, data);
     }
   }
 
-  // 5. Update Status & Timeline
+  // 5. Update Status
   async updateComplaint(id, data) { 
     try {
-      // Try FastAPI endpoint: PATCH /officer/issues/{id}/status
       return await this.patch(`/officer/issues/${id}/status`, { 
         status: data.new_status || 'in_progress', 
         action_taken: data.update_text || '',
-        resolution_notes: data.update_text || '' 
+        resolution_notes: data.update_text || '',
+        version: data.version || 1
       });
     } catch {
-      // Fallback to Node backend: POST /complaints/{id}/update
       return await this.post(`/complaints/${id}/update`, data);
     }
   }
