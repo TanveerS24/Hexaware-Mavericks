@@ -367,10 +367,17 @@ export const AdminProvider = ({ children }) => {
       );
       const approvedOff = pendingOfficers.find(o => o.id === officerId);
       toast.success(`Officer "${approvedOff?.name || officerId}" approved! Officer can now log in.`);
-      // Broadcast to Officer Portal tab
+      // Broadcast to Officer Portal tab with full officer data for instant login sync
       try {
         const channel = new BroadcastChannel('OFFICER_APPROVAL_CHANNEL');
-        channel.postMessage({ type: 'OFFICER_APPROVED', officer: approvedOff, officerId });
+        channel.postMessage({
+          type: 'OFFICER_APPROVED',
+          officer: {
+            ...approvedOff,
+            email: approvedOff?.email || '',
+          },
+          officerId
+        });
         setTimeout(() => channel.close(), 500);
       } catch (bcErr) {
         console.warn(bcErr);
@@ -393,10 +400,10 @@ export const AdminProvider = ({ children }) => {
       );
       const rejectedOff = pendingOfficers.find(o => o.id === officerId);
       toast.error(`Registration for "${rejectedOff?.name || officerId}" rejected.`);
-      // Broadcast to Officer Portal tab
+      // Broadcast to Officer Portal tab with email for registry cleanup
       try {
         const channel = new BroadcastChannel('OFFICER_APPROVAL_CHANNEL');
-        channel.postMessage({ type: 'OFFICER_REJECTED', officerId, reason });
+        channel.postMessage({ type: 'OFFICER_REJECTED', officerId, officerEmail: rejectedOff?.email || '', reason });
         setTimeout(() => channel.close(), 500);
       } catch (bcErr) {
         console.warn(bcErr);

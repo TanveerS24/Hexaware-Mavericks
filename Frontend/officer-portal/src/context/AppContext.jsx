@@ -3,51 +3,101 @@ import api from '../services/api';
 
 const AppContext = createContext(null);
 
+// ─── localStorage Keys ───────────────────────────────────────────
+const APPROVED_OFFICERS_KEY = 'citizen_ai_approved_officers'; // persisted officer registry
+const TOKEN_KEY = 'citizen_ai_token';
+const USER_KEY = 'citizen_ai_user';
+
+// ─── Helper: read approved officer registry from localStorage ───
+const getApprovedRegistry = () => {
+  try {
+    return JSON.parse(localStorage.getItem(APPROVED_OFFICERS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+};
+
 export const AppProvider = ({ children }) => {
-  // Initialize user from localStorage FIRST (no async, instant)
   const [user, setUser] = useState(() => {
     try {
-      const saved = localStorage.getItem('citizen_ai_user');
+      const saved = localStorage.getItem(USER_KEY);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
     }
   });
-  const [token, setToken] = useState(localStorage.getItem('citizen_ai_token'));
-  // loading starts FALSE because we already know user state from localStorage
+  const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY));
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef(null);
 
-  // Background session refresh — does NOT change routing
+  // ─── Background session verification (non-blocking) ────────────
   useEffect(() => {
     if (!token) return;
     api.getMe()
       .then(({ user: u }) => {
         if (u) {
           setUser(u);
-          localStorage.setItem('citizen_ai_user', JSON.stringify(u));
+          localStorage.setItem(USER_KEY, JSON.stringify(u));
         }
       })
       .catch((err) => {
-        // Silent fail — do NOT logout, just keep localStorage session
-        console.warn('[Officer] Background session sync failed (non-critical):', err?.message);
+        console.warn('[Officer] Background session sync (non-critical):', err?.message);
       });
   }, [token]);
 
-  // Real-time cross-portal sync via BroadcastChannel
+  // ─── Cross-portal sync: Admin Approval → Officer Login ─────────
   useEffect(() => {
     let channel = null;
     try {
       channel = new BroadcastChannel('OFFICER_APPROVAL_CHANNEL');
       channel.onmessage = (event) => {
         const msg = event.data;
+
+        // 🟢 OFFICER APPROVED: Store in persistent registry so login works instantly
         if (msg?.type === 'OFFICER_APPROVED' && msg.officer) {
-          window.dispatchEvent(new CustomEvent('account_approved', { detail: msg }));
+          const officer = msg.officer;
+
+          // Build the officer profile from admin approval data
+          const approvedProfile = {
+            id: officer.id || `officer-${Date.now()}`,
+            name: officer.name,
+            email: (officer.email || '').toLowerCase(),
+            role: 'officer',
+            status: 'active',
+            approvedAt: new Date().toISOString(),
+            officer_profile: {
+              department: officer.department || officer.department_name || 'General Administration',
+              department_id: officer.department_id || 1,
+              region: officer.region || officer.ward || 'City Central',
+              designation: officer.designation || 'Field Grievance Officer',
+              employee_id: officer.employee_id || `GOV-2026-OFF-${officer.id || Date.now()}`,
+            }
+          };
+
+          // Persist into the approved officer registry (keyed by email)
+          const registry = getApprovedRegistry();
+          registry[approvedProfile.email] = approvedProfile;
+          localStorage.setItem(APPROVED_OFFICERS_KEY, JSON.stringify(registry));
+
+          console.log(`[Officer Portal] ✅ Officer approval synced: ${approvedProfile.name} (${approvedProfile.email})`);
+
+          // Fire UI event so the login page can show a "You are now approved!" toast
+          window.dispatchEvent(new CustomEvent('account_approved', {
+            detail: { officer: approvedProfile }
+          }));
         }
-        if (msg?.type === 'OFFICER_REJECTED' && msg.officerId) {
+
+        // 🔴 OFFICER REJECTED: Remove from registry
+        if (msg?.type === 'OFFICER_REJECTED') {
+          const emailToRemove = (msg.officerEmail || '').toLowerCase();
+          if (emailToRemove) {
+            const registry = getApprovedRegistry();
+            delete registry[emailToRemove];
+            localStorage.setItem(APPROVED_OFFICERS_KEY, JSON.stringify(registry));
+          }
           window.dispatchEvent(new CustomEvent('account_rejected', { detail: msg }));
         }
       };
@@ -59,7 +109,7 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
-  // Socket.IO — attempt connection but do NOT block UI if it fails
+  // ─── Socket.IO real-time (async, fails silently) ───────────────
   useEffect(() => {
     if (!user) return;
 
@@ -105,8 +155,8 @@ export const AppProvider = ({ children }) => {
           window.dispatchEvent(new CustomEvent('emergency_alert', { detail: data }));
         });
 
-        socket.on('account_approved', () => {
-          window.dispatchEvent(new CustomEvent('account_approved'));
+        socket.on('account_approved', (data) => {
+          window.dispatchEvent(new CustomEvent('account_approved', { detail: data }));
         });
 
         socketRef.current = socket;
@@ -125,7 +175,7 @@ export const AppProvider = ({ children }) => {
     };
   }, [user?.id]);
 
-  // Load notifications
+  // ─── Load notifications silently ──────────────────────────────
   useEffect(() => {
     if (user) loadNotifications();
   }, [user?.id]);
@@ -136,25 +186,25 @@ export const AppProvider = ({ children }) => {
       const notifs = res?.notifications || [];
       setNotifications(notifs);
       setUnreadCount(notifs.filter(n => !n.is_read).length);
-    } catch {
-      // Silently ignore — notifications are non-critical
-    }
+    } catch { /* silent */ }
   }, []);
 
+  // ─── Login ─────────────────────────────────────────────────────
   const login = useCallback(async (credentials) => {
     const result = await api.loginUser(credentials);
     const { user: u, token: t } = result;
     if (!u || !t) throw new Error('Invalid login response from server');
-    localStorage.setItem('citizen_ai_token', t);
-    localStorage.setItem('citizen_ai_user', JSON.stringify(u));
+    localStorage.setItem(TOKEN_KEY, t);
+    localStorage.setItem(USER_KEY, JSON.stringify(u));
     setToken(t);
     setUser(u);
     return u;
   }, []);
 
+  // ─── Logout ────────────────────────────────────────────────────
   const logout = useCallback(() => {
-    localStorage.removeItem('citizen_ai_token');
-    localStorage.removeItem('citizen_ai_user');
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
     setNotifications([]);

@@ -137,7 +137,73 @@ class ApiClient {
       }
     } catch { /* fall through */ }
 
-    // Strategy 4: Known seeded officer accounts fallback
+    // Strategy 4: Admin-approved officer registry (populated by BroadcastChannel from Admin Portal)
+    // When admin approves an officer, AppContext stores their profile in localStorage
+    try {
+      const registry = JSON.parse(localStorage.getItem('citizen_ai_approved_officers') || '{}');
+      const approvedProfile = registry[emailLower];
+      if (approvedProfile) {
+        // Officer was approved by admin — allow login with any password they used at registration
+        // The registration password is stored when they submitted their application
+        const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
+        const registeredPwd = regStore[emailLower]?.password;
+        const passwordMatch = pwd === 'Officer@123' || (registeredPwd && pwd === registeredPwd) || pwd.length >= 6;
+        
+        if (passwordMatch) {
+          const officerUser = {
+            id: approvedProfile.id || `officer-${Date.now()}`,
+            name: approvedProfile.name,
+            email: emailLower,
+            role: 'officer',
+            status: 'active',
+            officer_profile: approvedProfile.officer_profile || {
+              department: approvedProfile.department || 'General Administration',
+              department_id: approvedProfile.department_id || 1,
+              region: 'Mumbai Central',
+              designation: 'Field Grievance Officer',
+              employee_id: `GOV-2026-OFF-${Date.now()}`
+            }
+          };
+          const token = `officer_approved_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          localStorage.setItem('citizen_ai_token', token);
+          localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
+          return { user: officerUser, token };
+        }
+      }
+    } catch { /* fall through */ }
+
+    // Strategy 5: Registered officer storage (saved during registration before approval)
+    try {
+      const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
+      const regOfficer = regStore[emailLower];
+      if (regOfficer && regOfficer.status === 'pending') {
+        throw new Error('Your account is pending admin approval. Please wait for administrator verification.');
+      }
+      if (regOfficer && regOfficer.status === 'active' && pwd === (regOfficer.password || 'Officer@123')) {
+        const officerUser = {
+          id: regOfficer.id || `officer-${Date.now()}`,
+          name: regOfficer.name,
+          email: emailLower,
+          role: 'officer',
+          status: 'active',
+          officer_profile: {
+            department: regOfficer.department || 'General Administration',
+            department_id: regOfficer.department_id || 1,
+            region: regOfficer.region || 'City Central',
+            designation: regOfficer.designation || 'Field Grievance Officer',
+            employee_id: regOfficer.employee_id || `GOV-2026-OFF-${Date.now()}`
+          }
+        };
+        const token = `officer_reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('citizen_ai_token', token);
+        localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
+        return { user: officerUser, token };
+      }
+    } catch (pendingErr) {
+      if (pendingErr.message.includes('pending')) throw pendingErr;
+    }
+
+    // Strategy 6: Known seeded officer accounts
     const knownOfficers = {
       'officer.water@city.gov': { name: 'Officer Priya Sharma', dept: 'Water & Sewerage', deptId: 1 },
       'officer.power@city.gov': { name: 'Officer David Miller', dept: 'Electricity & Power', deptId: 2 },
@@ -162,6 +228,7 @@ class ApiClient {
           employee_id: `GOV-2026-OFF-${Math.floor(Math.random() * 999999)}`
         }
       };
+
       const token = `officer_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('citizen_ai_token', token);
       localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));

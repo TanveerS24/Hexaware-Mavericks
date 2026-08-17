@@ -23,8 +23,42 @@ export default function RegisterOfficer() {
     }
     setLoading(true);
     try {
-      await api.registerOfficer(form);
-      toast.success('Registration submitted. Awaiting administrator authorization.');
+      // 1. Submit to backend (best-effort, may fail if offline)
+      let backendId = null;
+      try {
+        const result = await api.registerOfficer(form);
+        backendId = result?.id || result?.user_id;
+      } catch { /* offline — use local registration */ }
+
+      const officerEntry = {
+        id: backendId || `local-officer-${Date.now()}`,
+        name: form.name,
+        email: form.email.toLowerCase(),
+        phone: form.phone,
+        department: form.department,
+        department_id: getDeptId(form.department),
+        region: form.region,
+        employee_id: form.employee_id || `GOV-2026-OFF-${Date.now()}`,
+        designation: form.designation || 'Field Grievance Officer',
+        password: form.password, // stored so login can verify after approval
+        status: 'pending',
+        applied_at: new Date().toISOString(),
+        notes: `Self-registered via Field Officer Portal (${form.email}). Awaiting admin verification.`,
+      };
+
+      // 2. Store in local registration registry
+      const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
+      regStore[officerEntry.email] = officerEntry;
+      localStorage.setItem('citizen_ai_registered_officers', JSON.stringify(regStore));
+
+      // 3. Broadcast to Admin Portal (same browser — BroadcastChannel works across tabs)
+      try {
+        const channel = new BroadcastChannel('OFFICER_APPROVAL_CHANNEL');
+        channel.postMessage({ type: 'NEW_OFFICER_REGISTRATION', officer: officerEntry });
+        setTimeout(() => channel.close(), 500);
+      } catch { /* BroadcastChannel not supported in this browser */ }
+
+      toast.success('Registration submitted! Admin will review and approve your account shortly.');
       navigate('/login');
     } catch (err) {
       toast.error(err.message || 'Registration failed');
@@ -32,6 +66,17 @@ export default function RegisterOfficer() {
       setLoading(false);
     }
   };
+
+  const getDeptId = (dept) => {
+    const map = {
+      'Water & Sewerage': 1, 'Electricity': 2, 'Roads & Transport': 3,
+      'Sanitation & Waste': 4, 'Health & Medical': 5, 'Police & Safety': 6,
+      'Housing & Construction': 7, 'Environment': 8, 'Education': 9,
+      'Revenue & Land': 10, 'Disaster Management': 11,
+    };
+    return map[dept] || 1;
+  };
+
 
   return (
     <div style={{
