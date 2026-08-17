@@ -123,25 +123,41 @@ export const AppProvider = ({ children }) => {
     if (!user) return;
 
     let socket = null;
-    const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://hexaware-mavericks.onrender.com';
+    // Try local backend first (port 5000 with Socket.IO), then Render
+    const SOCKET_URLS = [
+      'http://localhost:5000',
+      import.meta.env.VITE_SOCKET_URL || 'https://hexaware-mavericks.onrender.com',
+    ];
 
-    const connectSocket = async () => {
+    const connectSocket = async (urlIndex = 0) => {
+      if (urlIndex >= SOCKET_URLS.length) return;
+      const SOCKET_URL = SOCKET_URLS[urlIndex];
       try {
         const { io } = await import('socket.io-client');
         socket = io(SOCKET_URL, {
           transports: ['websocket', 'polling'],
           reconnection: true,
-          reconnectionAttempts: 3,
+          reconnectionAttempts: 2,
           reconnectionDelay: 2000,
-          timeout: 8000,
+          timeout: 5000,
         });
 
         socket.on('connect', () => {
           setIsConnected(true);
+          console.log(`[Officer] ✅ Socket.IO connected to ${SOCKET_URL}`);
           if (user.officer_profile?.department_id) {
             socket.emit('join_department', user.officer_profile.department_id);
           }
           if (user.id) socket.emit('join_user', user.id);
+        });
+
+        socket.on('connect_error', () => {
+          // Failed to connect to this URL — try next one
+          socket.disconnect();
+          if (urlIndex + 1 < SOCKET_URLS.length) {
+            console.log(`[Officer] Socket ${SOCKET_URL} failed, trying next...`);
+            connectSocket(urlIndex + 1);
+          }
         });
 
         socket.on('disconnect', () => setIsConnected(false));
@@ -170,7 +186,8 @@ export const AppProvider = ({ children }) => {
 
         socketRef.current = socket;
       } catch (err) {
-        console.warn('[Officer] Socket.IO connection skipped:', err.message);
+        console.warn('[Officer] Socket.IO error:', err.message);
+        if (urlIndex + 1 < SOCKET_URLS.length) connectSocket(urlIndex + 1);
       }
     };
 
