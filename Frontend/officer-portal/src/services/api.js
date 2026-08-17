@@ -384,7 +384,7 @@ class ApiClient {
   async getComplaints(params = {}) {
     const query = new URLSearchParams(params).toString();
     const normalize = (res) => {
-      const list = res.items || res.complaints || (Array.isArray(res) ? res : []);
+      const list = res.complaints || res.items || (Array.isArray(res) ? res : []);
       return {
         complaints: list.map(item => ({
           id: item.id || item.issue_id,
@@ -399,16 +399,28 @@ class ApiClient {
           sla_deadline: item.sla_deadline || item.target_resolution_at,
           created_at: item.created_at,
           citizen: item.citizen || { name: item.citizen_name || 'Citizen', email: item.citizen_email || '' },
+          timeline: item.timeline || [],
         })),
-        total: res.total || list.length
+        total: res.total !== undefined ? res.total : list.length
       };
     };
 
+    // Strategy 1: Local Node Backend (port 5000)
+    try {
+      const res = await fetch(`http://localhost:5000/api/complaints?${query}`, { headers: this.getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        return normalize(data);
+      }
+    } catch { /* fall through */ }
+
+    // Strategy 2: Render Production API
     try {
       const res = await fetch(`${this.renderUrl}/officer/queue?${query}`, { headers: this.getHeaders() });
       if (res.ok) return normalize(await res.json());
     } catch { /* fall through */ }
 
+    // Strategy 3: Local proxy / FastAPI gateway
     try {
       const res = await this.get(`/officer/queue?${query}`);
       return normalize(res);
@@ -418,6 +430,16 @@ class ApiClient {
   }
 
   async getComplaint(id) {
+    // Strategy 1: Local Node Backend (port 5000)
+    try {
+      const res = await fetch(`http://localhost:5000/api/complaints/${id}`, { headers: this.getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        return { complaint: data.complaint || data };
+      }
+    } catch { /* fall through */ }
+
+    // Strategy 2: Render Production API
     try {
       const res = await fetch(`${this.renderUrl}/officer/issues/${id}`, { headers: this.getHeaders() });
       if (res.ok) {
@@ -425,10 +447,22 @@ class ApiClient {
         return { complaint: data.issue || data };
       }
     } catch { /* fall through */ }
+
     return this.get(`/officer/issues/${id}`).catch(() => ({ complaint: null }));
   }
 
   async assignComplaint(id, data) {
+    // Strategy 1: Local Node Backend (port 5000)
+    try {
+      const res = await fetch(`http://localhost:5000/api/complaints/${id}/assign`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (res.ok) return res.json();
+    } catch { /* fall through */ }
+
+    // Strategy 2: Render Production API
     try {
       const res = await fetch(`${this.renderUrl}/officer/issues/${id}/claim`, {
         method: 'PATCH',
@@ -437,10 +471,21 @@ class ApiClient {
       });
       if (res.ok) return res.json();
     } catch { /* fall through */ }
+
     return this.patch(`/officer/issues/${id}/claim`, data);
   }
 
   async updateComplaint(id, data) {
+    // Strategy 1: Local Node Backend (port 5000)
+    try {
+      const res = await fetch(`http://localhost:5000/api/complaints/${id}/update`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (res.ok) return res.json();
+    } catch { /* fall through */ }
+
     const payload = {
       status: data.new_status || 'in_progress',
       action_taken: data.update_text || '',
@@ -457,6 +502,7 @@ class ApiClient {
     } catch { /* fall through */ }
     return this.patch(`/officer/issues/${id}/status`, payload);
   }
+
 
   markMalicious(id, data) {
     return fetch(`${this.renderUrl}/officer/issues/${id}/mark-malicious`, {
