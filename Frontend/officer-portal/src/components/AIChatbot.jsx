@@ -24,8 +24,9 @@ export default function AIChatbot() {
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setLoading(true);
     try {
-      const { response } = await api.chatbot(userMsg);
-      setMessages(prev => [...prev, { role: 'bot', content: response }]);
+      const res = await api.chatbot(userMsg);
+      const botContent = res?.reply || res?.response || res?.data?.reply || res?.data?.response || (typeof res === 'string' ? res : 'I am ready to assist you.');
+      setMessages(prev => [...prev, { role: 'bot', content: botContent }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'bot', content: 'Connection temporarily unavailable. Please verify network or try again shortly.' }]);
     } finally {

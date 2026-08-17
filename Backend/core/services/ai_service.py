@@ -2,12 +2,13 @@ import json
 import logging
 import re
 from typing import Dict, Any, Optional
+import httpx
 try:
-    from google import genai
-    from google.genai import types
+    from google import genai  # type: ignore
+    from google.genai import types  # type: ignore
 except ImportError:
-    genai = None
-    types = None
+    genai = None  # type: ignore
+    types = None  # type: ignore
 
 from core.config import settings
 
@@ -16,14 +17,16 @@ logger = logging.getLogger(__name__)
 
 class GeminiProvider:
     @staticmethod
-    def get_client() -> Optional[genai.Client]:
+    def get_client() -> Optional[Any]:
+        if genai is None:
+            return None
         # Fallback to AI_API_KEY if GOOGLE_API_KEY isn't explicitly set
         api_key = getattr(settings, "GOOGLE_API_KEY", getattr(settings, "AI_API_KEY", None))
         try:
             return genai.Client(api_key=api_key)
         except Exception as e:
             # We want to know if this is failing
-            settings.GEMINI_INIT_ERROR = str(e)
+            setattr(settings, "GEMINI_INIT_ERROR", str(e))
             return None
 
     @staticmethod
@@ -70,7 +73,7 @@ class AIService:
             return "Citizen complaint submitted via audio recording."
         
         client = GeminiProvider.get_client()
-        if client:
+        if client and types is not None:
             # Try multiple models since the user's project might have specific access
             models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro']
             last_error = ""
@@ -102,18 +105,39 @@ class AIService:
         Rule-based classifier used as an instant, zero-downtime fallback.
         """
         lower = text.lower()
-        if any(w in lower for w in ["water", "pipe", "leak", "drain", "sewage", "tap", "drinking"]):
-            category = "water and sewage"
-            department = "water and sewage"
-        elif any(w in lower for w in ["electric", "power", "wire", "light", "transformer", "spark", "blackout", "pole"]):
-            category = "electricity"
-            department = "electricity"
-        elif any(w in lower for w in ["road", "transport", "bus", "pothole", "traffic", "street"]):
-            category = "Road and transport"
-            department = "Road and transport"
+        
+        # Priority and sentiment detection
+        urgent_keywords = ["danger", "hazard", "fire", "spark", "emergency", "severe", "urgent", "explosion", "flood", "shock", "burst", "life threatening"]
+        medium_keywords = ["broken", "leak", "blocked", "outage", "pothole", "smell", "dirty", "delay", "overflow", "damage"]
+        
+        if any(w in lower for w in urgent_keywords):
+            priority = "high"
+            sentiment = "urgent"
+        elif any(w in lower for w in medium_keywords):
+            priority = "medium"
+            sentiment = "frustrated"
         else:
-            category = "general"
-            department = "Road and transport"
+            priority = "low"
+            sentiment = "neutral"
+
+        if any(w in lower for w in ["water", "pipe", "leak", "drain", "sewage", "tap", "drinking", "sewer", "gutter", "waterlogged"]):
+            category = "Water & Sanitation"
+            department = "Water & Sanitation"
+        elif any(w in lower for w in ["electric", "power", "wire", "light", "transformer", "spark", "blackout", "pole", "voltage", "cable", "shock"]):
+            category = "Electricity & Power"
+            department = "Electricity & Power"
+        elif any(w in lower for w in ["road", "transport", "bus", "pothole", "traffic", "street", "pavement", "footpath", "bridge", "crater", "asphalt"]):
+            category = "Roads & Infrastructure"
+            department = "Roads & Infrastructure"
+        elif any(w in lower for w in ["garbage", "waste", "trash", "dump", "debris", "dustbin", "litter", "sweeping"]):
+            category = "Waste Management"
+            department = "Waste Management"
+        elif any(w in lower for w in ["mosquito", "dengue", "malaria", "stray", "dead animal", "clinic", "health", "fogging", "sanitation"]):
+            category = "Public Health"
+            department = "Public Health"
+        else:
+            category = "Municipal Administration"
+            department = "Municipal Administration"
 
         summary = text.strip()
         if len(summary) > 160:
@@ -122,10 +146,11 @@ class AIService:
         return {
             "category": category,
             "department": department,
-            "priority": "medium",
-            "sentiment": "neutral",
-            "confidence": "low",
-            "summary": summary
+            "priority": priority,
+            "sentiment": sentiment,
+            "confidence": "heuristic",
+            "summary": summary,
+            "english_translation": text.strip()
         }
 
     @classmethod
@@ -275,13 +300,9 @@ Response:"""
                         }
         except Exception as e:
             logger.warning(f"Cloud AI API request failed ({str(e)}). Using fallback classification.")
-            res = cls._heuristic_classify(transcript)
-            res["summary"] = f"DEBUG ERROR (Exception): {str(e)}"
-            return res
+            return cls._heuristic_classify(transcript)
 
-        res = cls._heuristic_classify(transcript)
-        res["summary"] = f"DEBUG ERROR (Generate Content Failed for all models). Last error: {getattr(resp, 'status_code', 'N/A')} {getattr(resp, 'text', 'No response text')}."
-        return res
+        return cls._heuristic_classify(transcript)
 
     @classmethod
     async def translate_text(cls, text: str) -> str:
@@ -357,9 +378,22 @@ Response:"""
         """
         Query AI based on citizen's complaint history context. Returns JSON dict.
         """
+        def _extract_json(text: str) -> Optional[dict]:
+            clean_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.DOTALL).strip()
+            try:
+                return json.loads(clean_text)
+            except Exception:
+                match = re.search(r'(\{[\s\S]*\})', text)
+                if match:
+                    try:
+                        return json.loads(match.group(1))
+                    except Exception:
+                        pass
+            return None
+
         prompt = f"""You are a helpful AI assistant for the Citizen Grievance Portal.
-Use the following context about the citizen's active complaints to answer their question.
-If the answer is not contained in the context, politely inform them that you do not have that information.
+Use the following context about the citizen's active complaints and municipal guidelines to answer their question.
+If the citizen is asking about municipal procedures or services, provide clear, concise and helpful guidance.
 Do NOT invent or hallucinate information.
 
 If the citizen is attempting to REPORT A NEW COMPLAINT in their message, you must extract the details.
@@ -371,12 +405,12 @@ You must output STRICTLY a valid JSON object matching this schema:
   "extracted_issue_draft": {{
     "transcript": "The full text of their new complaint",
     "summary": "A 1 sentence summary of the complaint",
-    "category": "water and sewage | electricity | Road and transport | General",
+    "category": "Water & Sanitation | Electricity & Power | Roads & Infrastructure | Waste Management | Public Health | Municipal Administration",
     "priority": "high | medium | low"
   }} // or null if can_auto_file is false
 }}
 
-Context (Citizen's Complaints):
+Context (Citizen's Complaints & Municipal Info):
 {context_data}
 
 Citizen's Question:
@@ -392,9 +426,41 @@ Citizen's Question:
                     ai_model = "grok-beta"
                     settings.AI_BASE_URL = "https://api.x.ai/v1"
 
-                # Use OpenAI compatible format for Grok/OpenAI
-                if provider != "gemini" and provider not in ["claude", "anthropic"]:
-                    base_url = (getattr(settings, "AI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
+                # 1. Anthropic Claude API
+                if provider in ["claude", "anthropic"] or "claude" in ai_model.lower():
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.anthropic.com/v1").rstrip("/")
+                    url = f"{base_url}/messages"
+                    headers = {
+                        "x-api-key": ai_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    }
+                    payload = {
+                        "model": ai_model if "claude" in ai_model.lower() else "claude-3-5-haiku-20241022",
+                        "max_tokens": 1024,
+                        "system": "You are an AI assistant for a municipal citizen grievance portal. You output strictly a valid JSON object matching the requested schema with no markdown decoration.",
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0.2
+                    }
+                    resp = await client.post(url, headers=headers, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        content_blocks = data.get("content", [])
+                        if content_blocks and content_blocks[0].get("type") == "text":
+                            raw_text = content_blocks[0].get("text", "{}").strip()
+                            clean_text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text, flags=re.DOTALL).strip()
+                            return json.loads(clean_text)
+
+                # 2. Gemini
+                elif provider == "gemini" or "gemini" in ai_model.lower():
+                    result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
+                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
+
+                # 3. OpenAI / Grok compatible
+                else:
+                    base_url = (getattr(settings, "AI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
                     url = f"{base_url}/chat/completions"
                     headers = {
                         "Authorization": f"Bearer {ai_api_key}",
@@ -413,17 +479,55 @@ Citizen's Question:
                     if resp.status_code == 200:
                         raw_json = resp.json()["choices"][0]["message"]["content"].strip()
                         return json.loads(raw_json)
-                
-                # If Gemini
-                elif provider == "gemini":
-                    result = await GeminiProvider.query_citizen_chatbot(context_data, user_query)
-                    if result: return {"reply": result, "can_auto_file": False, "extracted_issue_draft": None}
                     
         except Exception as e:
             logger.warning(f"Chatbot API request failed ({str(e)}).")
 
+        # Intelligent Fallback Redirection & Triage when Cloud LLM is offline or has 0 credits
+        q_lower = user_query.lower().strip()
+
+        # 1. Check if citizen is reporting an issue
+        is_reporting = any(w in q_lower for w in ["report", "leak", "power", "outage", "pothole", "garbage", "waste", "drain", "water", "electricity", "street", "pipe", "sewage", "bill", "broken", "issue", "complaint", "repair"])
+        
+        if is_reporting:
+            heuristic = cls._heuristic_classify(user_query)
+            cat = heuristic.get("category", "General")
+            prio = heuristic.get("priority", "medium")
+            summ = heuristic.get("summary", user_query)
+            return {
+                "reply": f"I've extracted your grievance details for {cat.title()}. You can review the draft below and submit it directly to the department.",
+                "can_auto_file": True,
+                "extracted_issue_draft": {
+                    "transcript": user_query,
+                    "summary": summ,
+                    "category": cat,
+                    "priority": prio
+                }
+            }
+
+        # 2. Check if citizen is asking about complaint status
+        if any(w in q_lower for w in ["status", "track", "my complaint", "check", "updates", "progress"]):
+            if "no active or past complaints" in context_data.lower():
+                reply_text = "You currently do not have any active or past complaints registered in your account. If you are experiencing a civic issue, please let me know or use the Report section."
+            else:
+                reply_text = f"Here is the summary of your registered grievances:\n\n{context_data}\n\nOur field officers are actively working on resolving high-priority issues."
+            return {
+                "reply": reply_text,
+                "can_auto_file": False,
+                "extracted_issue_draft": None
+            }
+
+        # 3. Check if asking about credibility score
+        if "credibility" in q_lower or "score" in q_lower:
+            return {
+                "reply": "Your Credibility Score is a measure of your account's reporting integrity. Standard citizen accounts start at 1.0 (100%). Submitting genuine and verified grievances maintains a high score, ensuring faster triage and prompt officer response.",
+                "can_auto_file": False,
+                "extracted_issue_draft": None
+            }
+
+        # 4. General municipal assistant greeting / info
         return {
-            "reply": "I apologize, but I am currently unable to process your request. Please try again later.",
+            "reply": "Hello! I am your AI Citizen Copilot. I can assist you with:\n1. Filing municipal complaints (Water, Electricity, Roads, Waste Management).\n2. Tracking the real-time status and officer updates of your grievances.\n3. Answering questions about municipal services and credibility ratings.\n\nHow may I help you today?",
             "can_auto_file": False,
             "extracted_issue_draft": None
         }

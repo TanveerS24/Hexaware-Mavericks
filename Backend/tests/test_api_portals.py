@@ -47,3 +47,24 @@ def test_auth_middleware_blocks_unauthorized_protected_routes():
     resp = client.get("/admin/issues")
     assert resp.status_code == 401
     assert resp.json()["error_code"] == "UNAUTHORIZED"
+
+
+def test_chatbot_public_access():
+    client = TestClient(gateway_app)
+    resp = client.post("/citizen/chatbot", json={"message": "Hello, who are you?"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "reply" in data
+    assert "response" in data
+    assert len(data["reply"]) > 0
+
+
+def test_chatbot_auto_file_extraction():
+    client = TestClient(gateway_app)
+    resp = client.post("/citizen/chatbot", json={"message": "There is a severe water leakage and broken pipe on 5th main street."})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["can_auto_file"] is True
+    assert data["extracted_issue_draft"] is not None
+    assert data["extracted_issue_draft"]["category"] == "Water & Sanitation"
+
