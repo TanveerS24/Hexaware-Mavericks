@@ -82,6 +82,15 @@ export const AppProvider = ({ children }) => {
           registry[approvedProfile.email] = approvedProfile;
           localStorage.setItem(APPROVED_OFFICERS_KEY, JSON.stringify(registry));
 
+          // ALSO update the registration store so Strategy 5 sees status='active'
+          try {
+            const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
+            if (regStore[approvedProfile.email]) {
+              regStore[approvedProfile.email].status = 'active';
+              localStorage.setItem('citizen_ai_registered_officers', JSON.stringify(regStore));
+            }
+          } catch { /* silent */ }
+
           console.log(`[Officer Portal] ✅ Officer approval synced: ${approvedProfile.name} (${approvedProfile.email})`);
 
           // Fire UI event so the login page can show a "You are now approved!" toast
