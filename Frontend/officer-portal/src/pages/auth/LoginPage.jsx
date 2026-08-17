@@ -13,14 +13,25 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.email || !form.password) return toast.error('Please enter email and password');
+    if (form.password.length < 6) return toast.error('Password must be at least 6 characters');
     setLoading(true);
     try {
-      const user = await login(form);
+      const result = await login(form);
+      const user = result?.user || result;
+      if (!user) throw new Error('Login failed — no user returned');
       if (user.role !== 'officer') {
         toast.error('This portal is reserved for Authorized Municipal Field Officers.');
         return;
       }
-      toast.success(`Welcome, ${user.name}`);
+      if (result?.offlineMode || user?.isOfflineSession) {
+        toast('⚠️ Logged in (offline mode) — backend unavailable. Some features may be limited.', {
+          duration: 6000,
+          icon: '📡',
+          style: { background: '#1e293b', color: '#fbbf24', border: '1px solid #f59e0b' }
+        });
+      } else {
+        toast.success(`✅ Welcome back, ${user.name || 'Officer'}!`);
+      }
       navigate('/officer');
     } catch (err) {
       toast.error(err.message || 'Authentication failed');
@@ -28,6 +39,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
 
   return (
     <div style={{

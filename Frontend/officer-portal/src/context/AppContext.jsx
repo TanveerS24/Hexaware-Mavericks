@@ -192,14 +192,17 @@ export const AppProvider = ({ children }) => {
   // ─── Login ─────────────────────────────────────────────────────
   const login = useCallback(async (credentials) => {
     const result = await api.loginUser(credentials);
-    const { user: u, token: t } = result;
+    const u = result?.user;
+    const t = result?.token;
     if (!u || !t) throw new Error('Invalid login response from server');
     localStorage.setItem(TOKEN_KEY, t);
     localStorage.setItem(USER_KEY, JSON.stringify(u));
     setToken(t);
     setUser(u);
-    return u;
+    // Return full result so LoginPage can detect offlineMode
+    return result;
   }, []);
+
 
   // ─── Logout ────────────────────────────────────────────────────
   const logout = useCallback(() => {
