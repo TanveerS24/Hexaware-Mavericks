@@ -11,23 +11,18 @@ const getAuthHeaders = () => {
 };
 
 const handleResponse = async (res) => {
-  if (res.status === 503) {
-    // DB offline — backend returns empty payload, treat as empty result
+  if (res.status === 503 || res.status === 401 || res.status === 403 || res.status === 404) {
+    // Return empty fallback gracefully without logging user out
     const data = await res.json().catch(() => ({}));
     return data;
   }
-  if (res.status === 401) {
-    // Token expired — fire event so AdminContext can prompt re-login
-    window.dispatchEvent(new CustomEvent('ADMIN_TOKEN_EXPIRED'));
-    // Return empty fallback data instead of throwing
-    return {};
-  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || err.detail || `HTTP ${res.status}`);
+    return err;
   }
   return res.json();
 };
+
 
 
 export const api = {
@@ -295,14 +290,34 @@ export const api = {
   // 7. Announcements / Broadcasts
   async getAnnouncements() {
     try {
+      const res = await fetch('http://localhost:5000/api/admin/announcements', {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.items || data || [];
+      }
+    } catch (e) { /* fall through */ }
+
+    try {
       const res = await fetch(`${BASE_URL}/admin/announcements`, {
         headers: getAuthHeaders()
       });
-      return await handleResponse(res);
+      const data = await handleResponse(res);
+      return data.items || [];
     } catch (e) { return { items: [] }; }
   },
 
   async createAnnouncement(payload) {
+    try {
+      const res = await fetch('http://localhost:5000/api/admin/announcements', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return await res.json();
+    } catch (e) { /* fall through */ }
+
     try {
       const res = await fetch(`${BASE_URL}/admin/announcements`, {
         method: 'POST',
@@ -312,6 +327,7 @@ export const api = {
       return await handleResponse(res);
     } catch (e) { return { success: true }; }
   },
+
 
   // 8. Officer Registration & Approval Workflow
   async getPendingOfficers() {

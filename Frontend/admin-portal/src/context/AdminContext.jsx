@@ -76,22 +76,8 @@ export const AdminProvider = ({ children }) => {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Handle token expiry across the session — clear token and redirect to /login
-  useEffect(() => {
-    const onTokenExpired = () => {
-      localStorage.removeItem('admin_access_token');
-      localStorage.removeItem('admin_user');
-      setUser(null);
-      toast.error('Session expired. Please log in again.', {
-        id: 'session-expired',
-        duration: 5000,
-      });
-    };
-    window.addEventListener('ADMIN_TOKEN_EXPIRED', onTokenExpired);
-    return () => window.removeEventListener('ADMIN_TOKEN_EXPIRED', onTokenExpired);
-  }, []);
-
   // Real-time BroadcastChannel Sync: allows instant communication across localhost ports
+
   useEffect(() => {
     let channel = null;
     try {
