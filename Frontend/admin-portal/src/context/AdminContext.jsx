@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import { api } from '../services/api';
+
 
 const AdminContext = createContext();
 
@@ -100,63 +102,71 @@ export const AdminProvider = ({ children }) => {
     };
   }, []);
 
-  // Real-time WebSocket connection to Gateway / Backend for live map status updates
+  // Real-time Socket.IO connection to Node backend (port 5000) for instant live sync
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws/admin`;
     let socket = null;
-    let reconnectTimeout = null;
+    try {
+      socket = io('http://localhost:5000', {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 2000,
+      });
 
-    const connectWs = () => {
-      try {
-        socket = new WebSocket(wsUrl);
+      socket.on('connect', () => {
+        setWsConnected(true);
+        socket.emit('join_admin_room');
+        console.log('⚡ Admin Portal connected to Live Socket.IO Stream on port 5000');
+      });
 
-        socket.onopen = () => {
-          setWsConnected(true);
-          console.log('⚡ Connected to Admin Real-Time WebSocket Gateway');
-        };
-
-        socket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'STATUS_CHANGE') {
-              handleLiveStatusChange(data);
-            } else if (data.type === 'NEW_OFFICER_REGISTRATION' && data.officer) {
-              setPendingOfficers(prev => {
-                const filtered = prev.filter(o => o.email?.toLowerCase() !== data.officer.email?.toLowerCase());
-                return [data.officer, ...filtered];
-              });
-              toast.success(`📢 New Officer Request Received: ${data.officer.name} (${data.officer.department || 'Officer'})`);
-            }
-          } catch (e) {
-            console.warn('Error parsing WS message:', e);
-          }
-        };
-
-        socket.onclose = () => {
-          setWsConnected(false);
-          reconnectTimeout = setTimeout(connectWs, 4000);
-        };
-
-        socket.onerror = () => {
-          setWsConnected(false);
-          socket.close();
-        };
-      } catch (err) {
+      socket.on('disconnect', () => {
         setWsConnected(false);
-        reconnectTimeout = setTimeout(connectWs, 4000);
-      }
-    };
+      });
 
-    connectWs();
+      socket.on('new_officer_registration', (data) => {
+        if (data?.officer) {
+          setPendingOfficers(prev => {
+            const filtered = prev.filter(o => o.email?.toLowerCase() !== data.officer.email?.toLowerCase() && o.id !== data.officer.id);
+            return [data.officer, ...filtered];
+          });
+          toast.success(`📢 New Officer Request: ${data.officer.name} (${data.officer.department || 'Officer'})`);
+          fetchAllData();
+        }
+      });
+
+      socket.on('officer_registered', (data) => {
+        if (data?.officer) {
+          setPendingOfficers(prev => {
+            const filtered = prev.filter(o => o.email?.toLowerCase() !== data.officer.email?.toLowerCase() && o.id !== data.officer.id);
+            return [data.officer, ...filtered];
+          });
+          fetchAllData();
+        }
+      });
+
+      socket.on('new_complaint', () => fetchAllData());
+      socket.on('complaint_updated', () => fetchAllData());
+      socket.on('complaint_assigned', () => fetchAllData());
+      socket.on('complaint_resolved', () => fetchAllData());
+    } catch (e) {
+      console.warn('Socket.IO init error:', e);
+    }
 
     return () => {
-      if (socket) socket.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socket) socket.disconnect();
     };
-  }, []);
+  }, [fetchAllData]);
+
+  // Periodic continuous background sync (every 10s)
+  useEffect(() => {
+    if (!localStorage.getItem('admin_access_token')) return;
+    const interval = setInterval(() => {
+      fetchAllData();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [fetchAllData]);
 
   // Handle incoming live status changes from field officers claiming or resolving complaints
+
   const handleLiveStatusChange = (payload) => {
     const { issue_id, status, officer_name, officer_id, assigned_at, lat, lng, category, ward, priority, summary: issueSummary } = payload;
 

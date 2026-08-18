@@ -350,7 +350,21 @@ class ApiClient {
   }
 
   async registerOfficer(data) {
-    // Try production first, fallback to local
+    // Strategy 1: Local Node Backend (port 5000)
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/register/officer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (res.ok) return resData;
+      if (resData.error) throw new Error(resData.error);
+    } catch (e) {
+      if (e.message && !e.message.includes('fetch') && !e.message.includes('Failed')) throw e;
+    }
+
+    // Strategy 2: Render Production Gateway
     try {
       return await fetch(`${this.renderUrl}/officer/auth/register`, {
         method: 'POST',
@@ -361,6 +375,7 @@ class ApiClient {
       return this.post('/officer/auth/register', data);
     }
   }
+
 
   async getMe() {
     // Try production
