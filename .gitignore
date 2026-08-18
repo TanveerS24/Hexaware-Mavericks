@@ -31,7 +31,10 @@ htmlcov/
 
 # Environment and secrets (keep .env.example committed)
 .env
+env
+*.env
 !.env.example
+
 
 # IDE
 .idea/
