@@ -315,7 +315,7 @@ export const api = {
   // 8. Officer Registration & Approval Workflow
   async getPendingOfficers() {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/officers?status=pending', {
+      const res = await fetch('http://localhost:5000/api/admin/officers', {
         headers: getAuthHeaders()
       });
       if (res.ok) {
@@ -343,6 +343,7 @@ export const api = {
       return data.items || [];
     } catch (e) { return []; }
   },
+
 
   async approveOfficer(userId, data = {}) {
     try {
