@@ -51,103 +51,50 @@ class ApiClient {
   delete(endpoint) { return this.request('DELETE', endpoint); }
 
   // ─────────────────────────────────────────────────────
-  // 1. OFFICER LOGIN — 4-strategy failover
+  // 1. OFFICER LOGIN — Prioritize Local Backend & Enforce Admin Approval
   // ─────────────────────────────────────────────────────
   async loginUser(credentials) {
     const emailLower = (credentials.email || '').toLowerCase().trim();
     const pwd = credentials.password || '';
 
-    const buildUser = (data, email) => {
-      // Normalize TokenResponse from FastAPI backend
-      if (data.access_token) {
-        return {
-          token: data.access_token,
-          user: data.user || {
-            id: data.user_id || 'officer-1',
-            name: data.name || email.split('@')[0],
-            email,
-            role: data.role || 'officer',
-            officer_profile: {
-              department: data.department_name || 'Water & Sewerage',
-              department_id: data.department_id || 1,
-              region: 'Mumbai Central',
-              designation: data.designation || 'Field Grievance Officer',
-              employee_id: data.employee_id || `GOV-2026-OFF-${data.user_id || '001'}`,
-            }
-          }
-        };
-      }
-      // Node.js backend format
-      if (data.token && data.user) {
-        return { token: data.token, user: data.user };
-      }
-      return null;
-    };
-
-    // Strategy 1: Render production FastAPI
-    try {
-      const res = await fetch(`${this.renderUrl}/officer/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailLower, password: pwd })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const result = buildUser(data, emailLower);
-        if (result) {
-          localStorage.setItem('citizen_ai_token', result.token);
-          localStorage.setItem('citizen_ai_user', JSON.stringify(result.user));
-          return result;
-        }
-      }
-    } catch { /* fall through */ }
-
-    // Strategy 2: Local FastAPI gateway (http://localhost:8000)
-    try {
-      const res = await fetch('http://localhost:8000/officer/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailLower, password: pwd })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const result = buildUser(data, emailLower);
-        if (result) {
-          localStorage.setItem('citizen_ai_token', result.token);
-          localStorage.setItem('citizen_ai_user', JSON.stringify(result.user));
-          return result;
-        }
-      }
-    } catch { /* fall through */ }
-
-    // Strategy 3: Local Node.js backend (http://localhost:5000)
+    // Strategy 1: Local Node.js backend (http://localhost:5000)
     try {
       const res = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailLower, password: pwd })
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user?.role === 'officer' && data.token) {
-          localStorage.setItem('citizen_ai_token', data.token);
-          localStorage.setItem('citizen_ai_user', JSON.stringify(data.user));
-          return { token: data.token, user: data.user };
-        }
-      }
-    } catch { /* fall through */ }
+      const data = await res.json().catch(() => ({}));
 
-    // Strategy 4: Admin-approved officer registry (populated by BroadcastChannel from Admin Portal)
-    // When admin approves an officer, AppContext stores their profile in localStorage
+      if (res.status === 403) {
+        // Explicit rejection or pending status from backend -> STOP & THROW!
+        throw new Error(data.error || 'Officer account pending admin approval. Please wait for an administrator to authorize your credentials.');
+      }
+
+      if (res.status === 401) {
+        throw new Error(data.error || 'Invalid officer credentials. Please check your email and password.');
+      }
+
+      if (res.ok && data.user?.role === 'officer' && data.token) {
+        localStorage.setItem('citizen_ai_token', data.token);
+        localStorage.setItem('citizen_ai_user', JSON.stringify(data.user));
+        return { token: data.token, user: data.user };
+      }
+    } catch (err) {
+      // If error is an explicit backend rejection/pending approval or invalid credentials, rethrow immediately!
+      if (err.message.includes('pending') || err.message.includes('rejected') || err.message.includes('approval') || err.message.includes('credentials') || err.message.includes('Invalid')) {
+        throw err;
+      }
+    }
+
+    // Strategy 2: Admin-approved officer registry (populated when admin clicks Approve in Admin Portal)
     try {
       const registry = JSON.parse(localStorage.getItem('citizen_ai_approved_officers') || '{}');
       const approvedProfile = registry[emailLower];
-      if (approvedProfile) {
-        // Officer was approved by admin — allow login with any password they used at registration
-        // The registration password is stored when they submitted their application
+      if (approvedProfile && (approvedProfile.status === 'active' || approvedProfile.status === 'approved')) {
         const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
         const registeredPwd = regStore[emailLower]?.password;
-        const passwordMatch = pwd === 'Officer@123' || (registeredPwd && pwd === registeredPwd) || pwd.length >= 6;
+        const passwordMatch = pwd === 'Officer@123' || (registeredPwd && pwd === registeredPwd);
         
         if (passwordMatch) {
           const officerUser = {
@@ -157,11 +104,11 @@ class ApiClient {
             role: 'officer',
             status: 'active',
             officer_profile: approvedProfile.officer_profile || {
-              department: approvedProfile.department || 'General Administration',
+              department: approvedProfile.department || 'Water & Sewerage',
               department_id: approvedProfile.department_id || 1,
-              region: 'Mumbai Central',
-              designation: 'Field Grievance Officer',
-              employee_id: `GOV-2026-OFF-${Date.now()}`
+              region: approvedProfile.region || 'Mumbai',
+              designation: approvedProfile.designation || 'Field Grievance Officer',
+              employee_id: approvedProfile.employee_id || `GOV-2026-OFF-${Date.now()}`
             }
           };
           const token = `officer_approved_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -170,184 +117,22 @@ class ApiClient {
           return { user: officerUser, token };
         }
       }
-    } catch { /* fall through */ }
+    } catch { /* ignore */ }
 
-    // Strategy 5: Registered officer storage check
-    // NOTE: BroadcastChannel does NOT work cross-port (5175→5174), so approved_officers
-    // registry may be empty even when admin approved. Never block login here — fall through
-    // to backend check (Strategy 7) and offline fallback (Strategy 8).
+    // Strategy 3: Check if officer registered locally but is still PENDING
     try {
       const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
       const regOfficer = regStore[emailLower];
-      const approvedReg = JSON.parse(localStorage.getItem('citizen_ai_approved_officers') || '{}');
-      const isApprovedLocally = !!approvedReg[emailLower];
-
-      if (regOfficer) {
-        // If locally marked active OR in local approved registry → allow in
-        if (regOfficer.status === 'active' || isApprovedLocally) {
-          const passwordMatch = pwd === (regOfficer.password || 'Officer@123')
-            || pwd === 'Officer@123'
-            || pwd.length >= 6;
-          if (passwordMatch) {
-            const profile = approvedReg[emailLower] || regOfficer;
-            const officerUser = {
-              id: profile.id || regOfficer.id || `officer-${Date.now()}`,
-              name: profile.name || regOfficer.name,
-              email: emailLower,
-              role: 'officer',
-              status: 'active',
-              officer_profile: profile.officer_profile || {
-                department: regOfficer.department || 'General Administration',
-                department_id: regOfficer.department_id || 1,
-                region: regOfficer.region || 'City Central',
-                designation: regOfficer.designation || 'Field Grievance Officer',
-                employee_id: regOfficer.employee_id || `GOV-2026-OFF-${Date.now()}`
-              }
-            };
-            const token = `officer_reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            localStorage.setItem('citizen_ai_token', token);
-            localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
-            return { user: officerUser, token };
-          }
-        }
-        // If status is 'pending' — DO NOT block here. Fall through to backend check (Strategy 7)
-        // which will confirm real status, then Strategy 8 handles offline mode.
-        // The admin may have approved via the backend even if local registry wasn't updated.
+      if (regOfficer && regOfficer.status === 'pending') {
+        throw new Error('Your officer application is currently PENDING review by the City Administrator. Please wait for authorization.');
       }
-    } catch { /* fall through */ }
-
-
-    // Strategy 6: Known seeded officer accounts
-    const knownOfficers = {
-      'officer.water@city.gov': { name: 'Officer Priya Sharma', dept: 'Water & Sewerage', deptId: 1 },
-      'officer.power@city.gov': { name: 'Officer David Miller', dept: 'Electricity & Power', deptId: 2 },
-      'officer@citizenai.gov.in': { name: 'Officer Rajesh Sharma', dept: 'Water & Sewerage', deptId: 1 },
-      'officer.electricity@citizenai.gov.in': { name: 'Officer Priya Kumar', dept: 'Electricity & Power', deptId: 2 },
-      'ranjith18@gmail.com': { name: 'Officer Ranjith Kumar', dept: 'Water & Sewerage', deptId: 1 },
-      'kurubaranjith18@gmail.com': { name: 'Officer Ranjith Kumar', dept: 'Water & Sewerage', deptId: 1 },
-    };
-
-    const knownMatch = knownOfficers[emailLower];
-    if (knownMatch && pwd === 'Officer@123') {
-      const officerUser = {
-        id: `officer-${Math.random().toString(36).substr(2, 9)}`,
-        name: knownMatch.name,
-        email: emailLower,
-        role: 'officer',
-        officer_profile: {
-          department: knownMatch.dept,
-          department_id: knownMatch.deptId,
-          region: 'Mumbai Central',
-          designation: 'Field Grievance Officer',
-          employee_id: `GOV-2026-OFF-${Math.floor(Math.random() * 999999)}`
-        }
-      };
-
-      const token = `officer_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('citizen_ai_token', token);
-      localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
-      return { user: officerUser, token };
+    } catch (err) {
+      if (err.message.includes('PENDING')) throw err;
     }
 
-    // Strategy 7: Query backend directly to confirm officer is approved
-    // Uses the admin users endpoint (public status check) to verify approval
-    try {
-      // Try to get user status from backend by querying the users list with email filter
-      const checkRes = await fetch(
-        `${this.renderUrl}/admin/users?email=${encodeURIComponent(emailLower)}&role=officer`,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-      if (checkRes.ok) {
-        const data = await checkRes.json();
-        const items = data.items || data.users || (Array.isArray(data) ? data : []);
-        const officerRecord = items.find(u =>
-          (u.email || '').toLowerCase() === emailLower && u.status === 'active'
-        );
-        if (officerRecord) {
-          // Officer is active in backend — retry login
-          const retryRes = await fetch(`${this.renderUrl}/officer/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: emailLower, password: pwd })
-          });
-          if (retryRes.ok) {
-            const loginData = await retryRes.json();
-            const result = buildUser(loginData, emailLower);
-            if (result) {
-              localStorage.setItem('citizen_ai_token', result.token);
-              localStorage.setItem('citizen_ai_user', JSON.stringify(result.user));
-              return result;
-            }
-          }
-          // Backend login fails but officer IS approved in DB — create local session
-          const officerUser = {
-            id: officerRecord.id || `officer-${Date.now()}`,
-            name: officerRecord.name || emailLower.split('@')[0],
-            email: emailLower,
-            role: 'officer',
-            status: 'active',
-            officer_profile: {
-              department: officerRecord.department_name || 'General Administration',
-              department_id: officerRecord.department_id || 1,
-              region: officerRecord.region || 'City Central',
-              designation: officerRecord.designation || 'Field Grievance Officer',
-              employee_id: officerRecord.employee_id || `GOV-2026-OFF-${Date.now()}`
-            }
-          };
-          const token = `officer_verified_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          localStorage.setItem('citizen_ai_token', token);
-          localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
-          // Cache in local approved registry
-          const reg = JSON.parse(localStorage.getItem('citizen_ai_approved_officers') || '{}');
-          reg[emailLower] = officerUser;
-          localStorage.setItem('citizen_ai_approved_officers', JSON.stringify(reg));
-          return { user: officerUser, token };
-        }
-        // If backend finds officer as 'pending' — still fall through to Strategy 8
-        // (admin may have approved locally but backend call failed due to expired token)
-      }
-    } catch { /* backend offline — fall through to Strategy 8 */ }
-
-
-    // Strategy 8: Absolute last resort — allow any valid email + 6+ char password
-    // This runs when ALL backend strategies fail (backend offline/expired token/unreachable)
-    // Ensures any admin-approved officer can always log in, even when backend is down
-
-    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower);
-    if (isValidEmail && pwd.length >= 6) {
-      // Pull real name/dept from registration store if available
-      let regData = {};
-      try {
-        const regStore = JSON.parse(localStorage.getItem('citizen_ai_registered_officers') || '{}');
-        regData = regStore[emailLower] || {};
-      } catch { /* ignore */ }
-
-      const nameFromEmail = emailLower.split('@')[0].replace(/[._-]/g, ' ')
-        .split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
-      const officerUser = {
-        id: regData.id || `officer-offline-${Date.now()}`,
-        name: regData.name || nameFromEmail,
-        email: emailLower,
-        role: 'officer',
-        status: 'active',
-        officer_profile: {
-          department: regData.department || 'General Administration',
-          department_id: regData.department_id || 1,
-          region: regData.region || 'City Central',
-          designation: regData.designation || 'Field Grievance Officer',
-          employee_id: regData.employee_id || `GOV-2026-OFF-${Date.now()}`
-        }
-      };
-      const token = `officer_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('citizen_ai_token', token);
-      localStorage.setItem('citizen_ai_user', JSON.stringify(officerUser));
-      return { user: officerUser, token };
-    }
-
-
-    throw new Error('Invalid credentials. Please check your email and password.');
+    throw new Error('Invalid credentials or officer account not authorized by City Administrator.');
   }
+
 
   async registerOfficer(data) {
     // Strategy 1: Local Node Backend (port 5000)
