@@ -51,7 +51,25 @@ export const api = {
       return data;
     };
 
-    // Strategy 1: Render production API
+    // Strategy 1: Local Node backend (port 5000)
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user?.role === 'admin' || data.token) {
+          return {
+            access_token: data.token || data.access_token,
+            user: data.user || { id: 'admin-1', name: 'Admin', email, role: 'admin' }
+          };
+        }
+      }
+    } catch (e) { /* fall through */ }
+
+    // Strategy 2: Render production API
     try {
       const res = await fetch(`${BASE_URL}/admin/auth/login`, {
         method: 'POST',
@@ -64,23 +82,6 @@ export const api = {
       }
     } catch (e) { /* fall through */ }
 
-    // Strategy 2: Local Node backend
-    try {
-      const res2 = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      if (res2.ok) {
-        const data2 = await res2.json();
-        if (data2.user?.role === 'admin' || data2.token) {
-          return {
-            access_token: data2.token || data2.access_token,
-            user: data2.user || { id: 'admin-1', name: 'Admin', email, role: 'admin' }
-          };
-        }
-      }
-    } catch (e) { /* fall through */ }
 
     // Strategy 3: FastAPI local gateway
     try {

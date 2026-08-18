@@ -56,9 +56,21 @@ export const AdminProvider = ({ children }) => {
       const v = results[5].value;
       setBroadcasts(Array.isArray(v) ? v : v?.items || []);
     }
-    if (results[6].status === 'fulfilled') setPendingOfficers(results[6].value || []);
+    if (results[6].status === 'fulfilled' && Array.isArray(results[6].value)) {
+      const backendOfficers = results[6].value;
+      setPendingOfficers(prev => {
+        const merged = [...backendOfficers];
+        prev.forEach(p => {
+          if (!merged.some(b => b.id === p.id || b.email?.toLowerCase() === p.email?.toLowerCase())) {
+            merged.push(p);
+          }
+        });
+        return merged;
+      });
+    }
     setDataLoading(false);
   }, []);
+
 
   useEffect(() => {
     fetchAllData();
