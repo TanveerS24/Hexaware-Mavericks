@@ -249,6 +249,17 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     // Strategy 1: Local Node Backend
     try {
+      const res = await fetch(`http://localhost:5000/api/admin/users?${query}`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { items: data.users || [], total: data.total || (data.users || []).length };
+      }
+    } catch (e) { /* fall through */ }
+
+    // Fallback: officers
+    try {
       const res = await fetch(`http://localhost:5000/api/admin/officers?${query}`, {
         headers: getAuthHeaders()
       });
@@ -278,6 +289,7 @@ export const api = {
       return await handleResponse(res);
     } catch (e) { return { items: [], total: 0 }; }
   },
+
 
   // 7. Announcements / Broadcasts
   async getAnnouncements() {
